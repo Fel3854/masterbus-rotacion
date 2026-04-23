@@ -164,6 +164,35 @@ def calcular_serie(df, vista):
     return pd.DataFrame(filas)
 
 
+def calcular_heatmap_data(df):
+    """Matriz mes × año con tasa de rotación para el mapa de calor."""
+    hoy = date.today()
+    años = list(range(AÑO_INICIO, hoy.year + 1))
+    filas = []
+    for mes in range(1, 13):
+        fila = {"mes": MESES[mes]}
+        for año in años:
+            if año == hoy.year and mes > hoy.month:
+                fila[str(año)] = None
+            else:
+                inicio = date(año, mes, 1)
+                fin = (inicio + relativedelta(months=1)) - timedelta(days=1)
+                _, _, _, tasa, _ = calcular_rotacion(df, inicio, min(fin, hoy))
+                fila[str(año)] = tasa
+        filas.append(fila)
+    return pd.DataFrame(filas).set_index("mes")
+
+
+def calcular_serie_por_empresa(df, vista):
+    """Serie temporal de tasa de rotación por empresa del grupo."""
+    resultados = {}
+    for empresa in sorted(df["empleador"].dropna().unique()):
+        df_emp = df[df["empleador"] == empresa]
+        if len(df_emp) >= 5:
+            resultados[empresa] = calcular_serie(df_emp, vista)
+    return resultados
+
+
 # ─── Estilos ─────────────────────────────────────────────────
 st.markdown("""
 <style>
@@ -254,6 +283,10 @@ delta_tasa = round(tasa - tasa_ant, 2) if tasa_ant else None
 
 antiguedad = antigüedad_media_bajas(df_bajas)
 
+df_serie_alertas = calcular_serie(df, vista)
+tasas_hist = df_serie_alertas["tasa"].tolist()[:-1]
+anomalia, media_hist, umbral_hist = detectar_anomalia(tasa, tasas_hist)
+
 st.subheader(f"Período: {label_periodo}")
 
 col1, col2, col3, col4, col5 = st.columns(5)
@@ -263,18 +296,23 @@ col2.metric("Bajas del período", f"{n_bajas:,}",
             delta=f"{delta_bajas:+,}", delta_color="inverse")
 col3.metric("Altas del período", f"{n_altas:,}",
             delta=f"{delta_altas:+,}")
-col4.metric("Tasa de Rotación", f"{tasa:.1f}%",
-            delta=f"{delta_tasa:+.1f}pp" if delta_tasa is not None else None,
-            delta_color="inverse")
+
+_tasa_color = "#e74c3c" if anomalia else "#f39c12" if (tasa > media_hist and media_hist > 0) else "#27ae60"
+_tasa_estado = "🔴 Elevada" if anomalia else "🟡 Por encima del promedio" if (tasa > media_hist and media_hist > 0) else "🟢 Normal"
+with col4:
+    st.metric("Tasa de Rotación", f"{tasa:.1f}%",
+              delta=f"{delta_tasa:+.1f}pp" if delta_tasa is not None else None,
+              delta_color="inverse")
+    st.markdown(
+        f'<span style="color:{_tasa_color};font-size:0.8rem;font-weight:600">{_tasa_estado}</span>',
+        unsafe_allow_html=True,
+    )
+
 col5.metric("Antigüedad media bajas", f"{antiguedad} m" if antiguedad is not None else "—")
 
 st.divider()
 
 # ─── Alertas ─────────────────────────────────────────────────
-df_serie_alertas = calcular_serie(df, vista)
-tasas_hist = df_serie_alertas["tasa"].tolist()[:-1]  # excluir período actual del histórico
-anomalia, media_hist, umbral_hist = detectar_anomalia(tasa, tasas_hist)
-
 if anomalia:
     st.error(
         f"**Alerta de rotación elevada** — La tasa del período ({tasa:.1f}%) supera "
@@ -309,14 +347,18 @@ with tab_tasa:
             line_dash="dot",
             line_color="#888",
             annotation_text=f"Media {media_hist:.1f}%",
-            annotation_position="top left",
+            annotation_position="bottom right",
+            annotation_bgcolor="rgba(255,255,255,0.85)",
+            annotation_font_color="#555",
         )
         fig_linea.add_hline(
             y=umbral_hist,
             line_dash="dash",
             line_color="#e74c3c",
             annotation_text=f"Umbral {umbral_hist:.1f}%",
-            annotation_position="top left",
+            annotation_position="top right",
+            annotation_bgcolor="rgba(255,255,255,0.85)",
+            annotation_font_color="#e74c3c",
         )
     fig_linea.update_layout(
         hovermode="x unified",
@@ -349,6 +391,38 @@ with tab_volumen:
         legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
     )
     st.plotly_chart(fig_barras, use_container_width=True)
+
+# ─── Mapa de calor ───────────────────────────────────────────
+st.divider()
+st.subheader("Mapa de Calor — Tasa de Rotación por Mes y Año")
+st.caption("Cada celda muestra la tasa de rotación (%). Verde = baja, amarillo = moderada, rojo = elevada.")
+
+df_heat = calcular_heatmap_data(df)
+años_heat = df_heat.columns.tolist()
+meses_heat = df_heat.index.tolist()
+z_heat = df_heat.values.tolist()
+
+fig_heat = go.Figure(go.Heatmap(
+    z=z_heat,
+    x=años_heat,
+    y=meses_heat,
+    colorscale=[[0, "#27ae60"], [0.5, "#f39c12"], [1, "#e74c3c"]],
+    text=[[f"{v:.1f}%" if v is not None else "" for v in fila] for fila in z_heat],
+    texttemplate="%{text}",
+    textfont={"size": 11},
+    hovertemplate="%{y} %{x}: %{z:.1f}%<extra></extra>",
+    showscale=True,
+    colorbar=dict(title="Tasa %", ticksuffix="%"),
+))
+fig_heat.update_layout(
+    height=420,
+    plot_bgcolor="white",
+    paper_bgcolor="white",
+    xaxis=dict(side="top", tickmode="linear"),
+    yaxis=dict(autorange="reversed"),
+    margin=dict(l=10, r=10, t=40, b=10),
+)
+st.plotly_chart(fig_heat, use_container_width=True)
 
 # ─── Desgloses ───────────────────────────────────────────────
 st.divider()
@@ -397,6 +471,49 @@ with col_der:
         st.plotly_chart(fig, use_container_width=True)
     else:
         st.info("Sin bajas en este período.")
+
+# ─── Evolución por empresa ───────────────────────────────────
+st.divider()
+st.subheader("Evolución por Empresa del Grupo")
+
+series_emp = calcular_serie_por_empresa(df, vista)
+
+if series_emp:
+    fig_emp = go.Figure()
+    colores = px.colors.qualitative.Set2
+    for i, (empresa, serie) in enumerate(series_emp.items()):
+        fig_emp.add_trace(go.Scatter(
+            x=serie["periodo_dt"],
+            y=serie["tasa"],
+            mode="lines+markers",
+            name=empresa,
+            line=dict(color=colores[i % len(colores)], width=2),
+            marker=dict(size=5),
+            hovertemplate=f"{empresa}<br>%{{y:.1f}}%<extra></extra>",
+        ))
+    if media_hist > 0:
+        fig_emp.add_hline(
+            y=media_hist,
+            line_dash="dot",
+            line_color="#888",
+            annotation_text=f"Media global {media_hist:.1f}%",
+            annotation_position="bottom right",
+            annotation_bgcolor="rgba(255,255,255,0.85)",
+            annotation_font_color="#555",
+        )
+    fig_emp.update_layout(
+        hovermode="x unified",
+        yaxis_ticksuffix="%",
+        plot_bgcolor="white",
+        paper_bgcolor="white",
+        xaxis=dict(showgrid=False),
+        yaxis=dict(showgrid=True, gridcolor="#eee", rangemode="tozero"),
+        height=380,
+        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
+    )
+    st.plotly_chart(fig_emp, use_container_width=True)
+else:
+    st.info("No hay suficientes datos por empresa para mostrar este gráfico con los filtros actuales.")
 
 # ─── Tabla de detalle ────────────────────────────────────────
 st.divider()
