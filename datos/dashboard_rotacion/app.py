@@ -11,7 +11,7 @@ import requests
 from datetime import date, timedelta
 from dateutil.relativedelta import relativedelta
 
-pio.templates.default = "plotly_white"
+pio.templates.default = "plotly_dark"
 
 # ─── Página ─────────────────────────────────────────────────
 st.set_page_config(
@@ -351,8 +351,8 @@ with tab_tasa:
             line_color="#888",
             annotation_text=f"Media {media_hist:.1f}%",
             annotation_position="bottom right",
-            annotation_bgcolor="rgba(255,255,255,0.85)",
-            annotation_font_color="#555",
+            annotation_bgcolor="rgba(30,30,30,0.85)",
+            annotation_font_color="#aaa",
         )
         fig_linea.add_hline(
             y=umbral_hist,
@@ -360,16 +360,14 @@ with tab_tasa:
             line_color="#e74c3c",
             annotation_text=f"Umbral {umbral_hist:.1f}%",
             annotation_position="top right",
-            annotation_bgcolor="rgba(255,255,255,0.85)",
-            annotation_font_color="#e74c3c",
+            annotation_bgcolor="rgba(30,30,30,0.85)",
+            annotation_font_color="#ff6b6b",
         )
     fig_linea.update_layout(
         hovermode="x unified",
         yaxis_ticksuffix="%",
-        plot_bgcolor="white",
-        paper_bgcolor="white",
         xaxis=dict(showgrid=False),
-        yaxis=dict(showgrid=True, gridcolor="#eee", rangemode="tozero"),
+        yaxis=dict(showgrid=True, gridcolor="#333", rangemode="tozero"),
         height=350,
         showlegend=False,
     )
@@ -386,10 +384,8 @@ with tab_volumen:
     )
     fig_barras.update_layout(
         hovermode="x unified",
-        plot_bgcolor="white",
-        paper_bgcolor="white",
         xaxis=dict(showgrid=False),
-        yaxis=dict(showgrid=True, gridcolor="#eee"),
+        yaxis=dict(showgrid=True, gridcolor="#333"),
         height=380,
         margin=dict(b=60),
         legend=dict(
@@ -415,20 +411,18 @@ fig_heat = go.Figure(go.Heatmap(
     x=años_heat,
     y=meses_heat,
     colorscale=[[0, "#27ae60"], [0.5, "#f39c12"], [1, "#e74c3c"]],
-    text=[[f"{v:.1f}%" if v is not None else "" for v in fila] for fila in z_heat],
+    text=[[f"{v:.1f}%" if pd.notna(v) else "" for v in fila] for fila in z_heat],
     texttemplate="%{text}",
-    textfont={"size": 11, "color": "#333"},
+    textfont={"size": 11, "color": "white"},
     hovertemplate="%{y} %{x}: %{z:.1f}%<extra></extra>",
     showscale=True,
     colorbar=dict(title="Tasa %", ticksuffix="%"),
 ))
 fig_heat.update_layout(
     height=420,
-    plot_bgcolor="white",
-    paper_bgcolor="white",
     xaxis=dict(side="top", tickmode="linear"),
     yaxis=dict(autorange="reversed"),
-    margin=dict(l=10, r=10, t=40, b=10),
+    margin=dict(l=10, r=80, t=40, b=10),
 )
 st.plotly_chart(fig_heat, use_container_width=True)
 
@@ -449,9 +443,8 @@ with col_izq:
             labels={"bajas": "Bajas", "cargo": ""},
         )
         fig.update_layout(
-            plot_bgcolor="white", paper_bgcolor="white",
             yaxis=dict(autorange="reversed"),
-            xaxis=dict(showgrid=True, gridcolor="#eee"),
+            xaxis=dict(showgrid=True, gridcolor="#333"),
             height=max(250, len(bc) * 32),
             margin=dict(l=0, r=10, t=10, b=10),
         )
@@ -470,9 +463,8 @@ with col_der:
             labels={"bajas": "Bajas", "sector": ""},
         )
         fig.update_layout(
-            plot_bgcolor="white", paper_bgcolor="white",
             yaxis=dict(autorange="reversed"),
-            xaxis=dict(showgrid=True, gridcolor="#eee"),
+            xaxis=dict(showgrid=True, gridcolor="#333"),
             height=max(250, len(bs) * 32),
             margin=dict(l=0, r=10, t=10, b=10),
         )
@@ -506,16 +498,14 @@ if series_emp:
             line_color="#888",
             annotation_text=f"Media global {media_hist:.1f}%",
             annotation_position="bottom right",
-            annotation_bgcolor="rgba(255,255,255,0.85)",
-            annotation_font_color="#555",
+            annotation_bgcolor="rgba(30,30,30,0.85)",
+            annotation_font_color="#aaa",
         )
     fig_emp.update_layout(
         hovermode="x unified",
         yaxis_ticksuffix="%",
-        plot_bgcolor="white",
-        paper_bgcolor="white",
         xaxis=dict(showgrid=False),
-        yaxis=dict(showgrid=True, gridcolor="#eee", rangemode="tozero"),
+        yaxis=dict(showgrid=True, gridcolor="#333", rangemode="tozero"),
         height=430,
         margin=dict(b=80),
         legend=dict(
