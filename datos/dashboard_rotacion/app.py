@@ -390,8 +390,13 @@ with tab_volumen:
         paper_bgcolor="white",
         xaxis=dict(showgrid=False),
         yaxis=dict(showgrid=True, gridcolor="#eee"),
-        height=350,
-        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
+        height=380,
+        margin=dict(b=60),
+        legend=dict(
+            orientation="h",
+            yanchor="top", y=-0.18,
+            xanchor="center", x=0.5,
+        ),
     )
     st.plotly_chart(fig_barras, use_container_width=True)
 
@@ -412,7 +417,7 @@ fig_heat = go.Figure(go.Heatmap(
     colorscale=[[0, "#27ae60"], [0.5, "#f39c12"], [1, "#e74c3c"]],
     text=[[f"{v:.1f}%" if v is not None else "" for v in fila] for fila in z_heat],
     texttemplate="%{text}",
-    textfont={"size": 11},
+    textfont={"size": 11, "color": "#333"},
     hovertemplate="%{y} %{x}: %{z:.1f}%<extra></extra>",
     showscale=True,
     colorbar=dict(title="Tasa %", ticksuffix="%"),
@@ -511,8 +516,13 @@ if series_emp:
         paper_bgcolor="white",
         xaxis=dict(showgrid=False),
         yaxis=dict(showgrid=True, gridcolor="#eee", rangemode="tozero"),
-        height=380,
-        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
+        height=430,
+        margin=dict(b=80),
+        legend=dict(
+            orientation="h",
+            yanchor="top", y=-0.18,
+            xanchor="center", x=0.5,
+        ),
     )
     st.plotly_chart(fig_emp, use_container_width=True)
 else:
