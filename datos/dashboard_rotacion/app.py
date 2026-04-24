@@ -360,14 +360,70 @@ hr {{
     color: {COLOR_TEXT} !important;
 }}
 
-/* Inputs / selectbox */
-[data-testid="stTextInput"] input,
-[data-baseweb="select"] {{
+/* Inputs / selectbox — todos los niveles del componente BaseWeb */
+[data-testid="stTextInput"] input {{
     background-color: #FBFBFB !important;
     border-color: {COLOR_BORDER} !important;
     border-radius: 4px !important;
     color: {COLOR_TEXT} !important;
     font-size: 13px !important;
+}}
+
+/* Control principal y todos sus hijos */
+[data-baseweb="select"],
+[data-baseweb="select"] > div,
+[data-baseweb="select"] > div > div,
+[data-baseweb="select"] > div > div > div {{
+    background-color: #FBFBFB !important;
+    border-color: {COLOR_BORDER} !important;
+    color: {COLOR_TEXT} !important;
+}}
+
+/* Texto seleccionado y placeholder */
+[data-baseweb="select"] span,
+[data-baseweb="select"] input {{
+    color: {COLOR_TEXT} !important;
+    background-color: transparent !important;
+    font-size: 13px !important;
+}}
+
+/* Ícono de chevron */
+[data-baseweb="select"] svg {{
+    fill: {COLOR_MUTED} !important;
+}}
+
+/* Dropdown list */
+[data-baseweb="popover"],
+[data-baseweb="menu"],
+ul[data-baseweb="menu"] {{
+    background-color: {COLOR_SURFACE} !important;
+    border: 1px solid {COLOR_BORDER} !important;
+    border-radius: 4px !important;
+}}
+
+/* Opciones del dropdown */
+[role="option"],
+[data-baseweb="option"] {{
+    background-color: {COLOR_SURFACE} !important;
+    color: {COLOR_TEXT} !important;
+    font-size: 13px !important;
+}}
+[role="option"]:hover,
+[data-baseweb="option"]:hover {{
+    background-color: {COLOR_BG} !important;
+}}
+
+/* Tags del multiselect */
+[data-baseweb="tag"] {{
+    background-color: {COLOR_PRIMARY}18 !important;
+    border: 1px solid {COLOR_PRIMARY}40 !important;
+    border-radius: 4px !important;
+}}
+[data-baseweb="tag"] span {{
+    color: {COLOR_TEXT} !important;
+}}
+[data-baseweb="tag"] svg {{
+    fill: {COLOR_MUTED} !important;
 }}
 
 /* Captions */
