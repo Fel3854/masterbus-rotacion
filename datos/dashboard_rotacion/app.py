@@ -8,10 +8,10 @@ import plotly.express as px
 import plotly.graph_objects as go
 import plotly.io as pio
 import requests
-from datetime import date, timedelta
+from datetime import date, timedelta, datetime
 from dateutil.relativedelta import relativedelta
 
-pio.templates.default = "plotly_dark"
+pio.templates.default = "plotly_white"
 
 # ─── Página ─────────────────────────────────────────────────
 st.set_page_config(
@@ -23,7 +23,17 @@ st.set_page_config(
 # ─── Constantes ─────────────────────────────────────────────
 API_URL = "https://traficonuevo.masterbus.net/api/v1/auto/e"
 AÑO_INICIO = 2020
-COLOR_MASTER = "#d35400"
+
+# Branding MasterBus (extraído de traficonuevo.masterbus.net)
+COLOR_PRIMARY   = "#ED5D3B"   # naranja-rojo principal
+COLOR_SECONDARY = "#46BCD2"   # teal secundario
+COLOR_ACCENT    = "#8C8987"   # gris acento
+COLOR_DANGER    = "#D12F19"   # rojo enlaces / peligro
+COLOR_BG        = "#EDEDED"   # fondo general
+COLOR_SURFACE   = "#FFFFFF"   # tarjetas
+COLOR_TEXT      = "#333333"   # texto principal
+COLOR_MUTED     = "#8C8987"   # texto secundario
+COLOR_BORDER    = "#CCCCCC"   # bordes
 
 GRUPO_MASTER = {
     "MASTER BUS S.A",
@@ -43,6 +53,41 @@ MESES = {
     5: "Mayo", 6: "Junio", 7: "Julio", 8: "Agosto",
     9: "Septiembre", 10: "Octubre", 11: "Noviembre", 12: "Diciembre",
 }
+
+# ─── Helper de layout de gráficos ────────────────────────────
+def _chart_base(**overrides):
+    """Tokens de diseño compartidos — branding MasterBus light mode."""
+    base = dict(
+        paper_bgcolor="rgba(0,0,0,0)",
+        plot_bgcolor=COLOR_SURFACE,
+        font=dict(
+            family="'Helvetica Neue', Helvetica, Arial, Verdana, sans-serif",
+            color=COLOR_MUTED,
+            size=12,
+        ),
+        xaxis=dict(
+            showgrid=False, showline=True, zeroline=False,
+            linecolor=COLOR_BORDER, tickfont=dict(color=COLOR_MUTED),
+        ),
+        yaxis=dict(
+            showgrid=True, gridcolor="#E8E8E8", zeroline=False,
+            linecolor=COLOR_BORDER, tickfont=dict(color=COLOR_MUTED),
+            rangemode="tozero",
+        ),
+        hoverlabel=dict(
+            bgcolor=COLOR_SURFACE,
+            bordercolor=COLOR_BORDER,
+            font=dict(
+                family="'Helvetica Neue', Helvetica, Arial, sans-serif",
+                color=COLOR_TEXT,
+                size=12,
+            ),
+        ),
+        margin=dict(l=10, r=10, t=20, b=10),
+    )
+    base.update(overrides)
+    return base
+
 
 # ─── Datos ───────────────────────────────────────────────────
 
@@ -70,7 +115,7 @@ def cargar_datos():
     df["cargo"] = df["cargo"].str.strip().str.upper()
     df["str"] = df["str"].str.strip()
 
-    return df
+    return df, datetime.now()
 
 
 def calcular_rotacion(df, inicio, fin):
@@ -98,7 +143,6 @@ def calcular_rotacion(df, inicio, fin):
 
 
 def periodo_anterior(vista, año, mes):
-    """Devuelve (inicio, fin) del período inmediatamente anterior."""
     if vista == "Mensual":
         primer_dia = date(año, mes, 1)
         fin_ant = primer_dia - timedelta(days=1)
@@ -109,7 +153,6 @@ def periodo_anterior(vista, año, mes):
 
 
 def antigüedad_media_bajas(df_bajas):
-    """Antigüedad media en meses de los empleados que se fueron."""
     if df_bajas.empty:
         return None
     meses = []
@@ -121,7 +164,6 @@ def antigüedad_media_bajas(df_bajas):
 
 
 def detectar_anomalia(tasa_actual, serie_historica):
-    """True si la tasa actual supera media + 2σ del histórico."""
     valores = [v for v in serie_historica if v > 0]
     if len(valores) < 3:
         return False, 0.0, 0.0
@@ -131,8 +173,8 @@ def detectar_anomalia(tasa_actual, serie_historica):
     return tasa_actual > umbral, round(media, 2), round(umbral, 2)
 
 
+@st.cache_data(ttl=3600)
 def calcular_serie(df, vista):
-    """Serie temporal completa desde AÑO_INICIO hasta hoy."""
     hoy = date.today()
     filas = []
 
@@ -168,7 +210,6 @@ def calcular_serie(df, vista):
 
 
 def calcular_heatmap_data(df):
-    """Matriz mes × año con tasa de rotación para el mapa de calor."""
     hoy = date.today()
     años = list(range(AÑO_INICIO, hoy.year + 1))
     filas = []
@@ -186,8 +227,8 @@ def calcular_heatmap_data(df):
     return pd.DataFrame(filas).set_index("mes")
 
 
+@st.cache_data(ttl=3600)
 def calcular_serie_por_empresa(df, vista):
-    """Serie temporal de tasa de rotación por empresa del grupo."""
     resultados = {}
     for empresa in sorted(df["empleador"].dropna().unique()):
         df_emp = df[df["empleador"] == empresa]
@@ -196,33 +237,192 @@ def calcular_serie_por_empresa(df, vista):
     return resultados
 
 
-# ─── Estilos ─────────────────────────────────────────────────
-st.markdown("""
+# ─── Estilos — Branding MasterBus ────────────────────────────
+st.markdown(f"""
 <style>
-    [data-testid="metric-container"] {
-        background: #fafafa;
-        border: 1px solid #eee;
-        border-radius: 8px;
-        padding: 16px;
-    }
-    [data-testid="stMetricValue"] { font-size: 2rem !important; }
+/* Typography: sistema MasterBus — Arial / Helvetica Neue */
+html, body, [class*="st-"], p, span, label, div, button, input, select {{
+    font-family: 'Helvetica Neue', Helvetica, Arial, Verdana, sans-serif !important;
+    font-size: 13px;
+    color: {COLOR_TEXT};
+}}
+
+/* Fondo general */
+.stApp {{
+    background-color: {COLOR_BG} !important;
+}}
+[data-testid="stAppViewContainer"] > .main {{
+    background-color: {COLOR_BG};
+}}
+[data-testid="stHeader"] {{
+    background-color: {COLOR_BG} !important;
+}}
+
+/* Metric cards */
+[data-testid="metric-container"] {{
+    background: {COLOR_SURFACE};
+    border: 1px solid {COLOR_BORDER};
+    border-top: 3px solid {COLOR_PRIMARY};
+    border-radius: 4px;
+    padding: 16px 14px 14px;
+    transition: box-shadow 0.15s ease;
+}}
+[data-testid="metric-container"]:hover {{
+    box-shadow: 0 2px 8px rgba(237,93,59,0.15);
+}}
+[data-testid="stMetricValue"] {{
+    font-size: 1.9rem !important;
+    font-weight: 700 !important;
+    color: {COLOR_TEXT} !important;
+    letter-spacing: -0.01em;
+}}
+[data-testid="stMetricLabel"] {{
+    color: {COLOR_MUTED} !important;
+    font-size: 0.72rem !important;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    font-weight: 600;
+}}
+[data-testid="stMetricDelta"] svg {{ display: none; }}
+
+/* Sidebar */
+[data-testid="stSidebar"] {{
+    background: {COLOR_SURFACE} !important;
+    border-right: 1px solid {COLOR_BORDER} !important;
+}}
+[data-testid="stSidebarContent"] {{ padding-top: 1rem; }}
+
+/* Botones */
+.stButton > button {{
+    background-color: {COLOR_ACCENT} !important;
+    color: #FFFFFF !important;
+    border: 1px solid #474747 !important;
+    border-radius: 4px !important;
+    font-size: 13px !important;
+    font-weight: 600 !important;
+    transition: background-color 0.15s ease !important;
+}}
+.stButton > button:hover {{
+    background-color: {COLOR_PRIMARY} !important;
+    border-color: {COLOR_PRIMARY} !important;
+}}
+
+/* Download button */
+.stDownloadButton > button {{
+    background-color: {COLOR_SURFACE} !important;
+    color: {COLOR_TEXT} !important;
+    border: 1px solid {COLOR_BORDER} !important;
+    border-radius: 4px !important;
+    font-size: 13px !important;
+}}
+.stDownloadButton > button:hover {{
+    border-color: {COLOR_PRIMARY} !important;
+    color: {COLOR_PRIMARY} !important;
+}}
+
+/* Dividers */
+hr {{
+    border: none !important;
+    border-top: 1px solid {COLOR_BORDER} !important;
+    margin: 0.5rem 0 !important;
+    opacity: 1 !important;
+}}
+
+/* Alerts */
+[data-testid="stAlert"] {{
+    border-radius: 4px !important;
+    font-size: 13px;
+    border-left-width: 4px;
+}}
+
+/* Tabs */
+.stTabs [data-baseweb="tab-list"] {{
+    gap: 6px;
+    background: {COLOR_SURFACE};
+    border-radius: 8px;
+    padding: 5px 6px;
+    border: 1px solid {COLOR_BORDER};
+}}
+.stTabs [data-baseweb="tab"] {{
+    border-radius: 6px;
+    color: {COLOR_MUTED};
+    font-size: 13px;
+    font-weight: 600;
+    padding: 8px 20px !important;
+    min-height: 36px !important;
+}}
+.stTabs [aria-selected="true"] {{
+    background: {COLOR_PRIMARY} !important;
+    color: #FFFFFF !important;
+}}
+.stTabs [data-baseweb="tab"]:hover:not([aria-selected="true"]) {{
+    background: {COLOR_BG} !important;
+    color: {COLOR_TEXT} !important;
+}}
+
+/* Inputs / selectbox */
+[data-testid="stTextInput"] input,
+[data-baseweb="select"] {{
+    background-color: #FBFBFB !important;
+    border-color: {COLOR_BORDER} !important;
+    border-radius: 4px !important;
+    color: {COLOR_TEXT} !important;
+    font-size: 13px !important;
+}}
+
+/* Captions */
+.stCaption, [data-testid="stCaptionContainer"] {{
+    color: {COLOR_MUTED} !important;
+    font-size: 12px !important;
+}}
+
+/* Dataframe */
+[data-testid="stDataFrameContainer"] {{
+    border: 1px solid {COLOR_BORDER};
+    border-radius: 4px;
+}}
+
+/* Scrollbar */
+::-webkit-scrollbar {{ width: 5px; height: 5px; }}
+::-webkit-scrollbar-track {{ background: {COLOR_BG}; }}
+::-webkit-scrollbar-thumb {{ background: {COLOR_BORDER}; border-radius: 2px; }}
+::-webkit-scrollbar-thumb:hover {{ background: {COLOR_PRIMARY}; }}
 </style>
 """, unsafe_allow_html=True)
 
-# ─── Título ──────────────────────────────────────────────────
-st.title("📊 Rotación de Personal — Grupo Master")
-st.caption("Datos actualizados cada hora desde la API de MasterBus · Fórmula: Bajas / Plantilla al inicio del período")
+
+# ─── Session state para filtros ──────────────────────────────
+if "cargos_sel" not in st.session_state:
+    st.session_state.cargos_sel = []
+if "sectores_sel" not in st.session_state:
+    st.session_state.sectores_sel = []
+
+def _borrar_filtros():
+    st.session_state.cargos_sel = []
+    st.session_state.sectores_sel = []
 
 # ─── Cargar datos ────────────────────────────────────────────
 try:
-    df_raw = cargar_datos()
-except Exception as e:
-    st.error(f"No se pudieron cargar los datos: {e}")
+    df_raw, timestamp_carga = cargar_datos()
+except Exception:
+    st.error(
+        "No se pudieron cargar los datos desde la API de MasterBus. "
+        "Verificá tu conexión e intentá de nuevo."
+    )
+    if st.button("Reintentar"):
+        st.cache_data.clear()
+        st.rerun()
     st.stop()
 
 # ─── Sidebar ─────────────────────────────────────────────────
 with st.sidebar:
-    st.header("Período")
+    st.markdown(f"""
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:1rem;">
+      <div style="width:3px;height:20px;background:{COLOR_PRIMARY};border-radius:2px;"></div>
+      <span style="font-weight:700;font-size:13px;color:{COLOR_TEXT};">Período</span>
+    </div>
+    """, unsafe_allow_html=True)
+
     vista = st.radio("Vista", ["Mensual", "Anual"], horizontal=True)
 
     hoy = date.today()
@@ -239,20 +439,38 @@ with st.sidebar:
         mes_sel = None
 
     st.divider()
-    st.header("Filtros")
+    st.markdown(f"""
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:0.75rem;">
+      <div style="width:3px;height:20px;background:{COLOR_SECONDARY};border-radius:2px;"></div>
+      <span style="font-weight:700;font-size:13px;color:{COLOR_TEXT};">Filtros</span>
+    </div>
+    """, unsafe_allow_html=True)
 
     cargos_disp = sorted(df_raw["cargo"].dropna().unique())
-    cargos_sel = st.multiselect("Cargo / Puesto", cargos_disp, placeholder="Todos los cargos")
+    cargos_sel = st.multiselect(
+        "Cargo / Puesto", cargos_disp,
+        key="cargos_sel",
+        placeholder="Todos los cargos",
+        format_func=lambda x: x.title(),
+    )
 
     sectores_disp = sorted(df_raw["str"].dropna().unique())
-    sectores_sel = st.multiselect("Sector / Operación", sectores_disp, placeholder="Todos los sectores")
+    sectores_sel = st.multiselect(
+        "Sector / Operación", sectores_disp,
+        key="sectores_sel",
+        placeholder="Todos los sectores",
+    )
 
-    st.divider()
-    if st.button("🔄 Actualizar datos", use_container_width=True):
-        st.cache_data.clear()
-        st.rerun()
+    col_borrar, col_act = st.columns(2)
+    with col_borrar:
+        st.button("Borrar filtros", on_click=_borrar_filtros, use_container_width=True)
+    with col_act:
+        if st.button("Actualizar datos", use_container_width=True):
+            st.cache_data.clear()
+            st.rerun()
 
-    st.caption(f"Total empleados Grupo Master en la API: {len(df_raw):,}")
+    st.caption(f"Total empleados Grupo Master: {len(df_raw):,}")
+    st.caption(f"Datos al: {timestamp_carga:%d/%m/%Y %H:%M}")
 
 # ─── Aplicar filtros ─────────────────────────────────────────
 df = df_raw.copy()
@@ -290,28 +508,146 @@ df_serie_alertas = calcular_serie(df, vista)
 tasas_hist = df_serie_alertas["tasa"].tolist()[:-1]
 anomalia, media_hist, umbral_hist = detectar_anomalia(tasa, tasas_hist)
 
-st.subheader(f"Período: {label_periodo}")
+_tasa_color = COLOR_DANGER if anomalia else "#B45309" if (tasa > media_hist and media_hist > 0) else "#15803D"
+_tasa_estado = "Elevada" if anomalia else "Por encima del promedio" if (tasa > media_hist and media_hist > 0) else "Normal"
 
-col1, col2, col3, col4, col5 = st.columns(5)
-col1.metric("Plantilla al inicio", f"{n_plantilla:,}",
-            delta=f"{delta_plantilla:+,}" if delta_plantilla is not None else None)
-col2.metric("Bajas del período", f"{n_bajas:,}",
-            delta=f"{delta_bajas:+,}", delta_color="inverse")
-col3.metric("Altas del período", f"{n_altas:,}",
-            delta=f"{delta_altas:+,}")
 
-_tasa_color = "#e74c3c" if anomalia else "#f39c12" if (tasa > media_hist and media_hist > 0) else "#27ae60"
-_tasa_estado = "🔴 Elevada" if anomalia else "🟡 Por encima del promedio" if (tasa > media_hist and media_hist > 0) else "🟢 Normal"
-with col4:
-    st.metric("Tasa de Rotación", f"{tasa:.1f}%",
-              delta=f"{delta_tasa:+.1f}pp" if delta_tasa is not None else None,
-              delta_color="inverse")
-    st.markdown(
-        f'<span style="color:{_tasa_color};font-size:0.8rem;font-weight:600">{_tasa_estado}</span>',
-        unsafe_allow_html=True,
+def _delta_html(val, inverse=False, suffix="", decimals=0):
+    if val is None:
+        return ""
+    if inverse:
+        color = "#D12F19" if val > 0 else "#15803D" if val < 0 else COLOR_MUTED
+    else:
+        color = "#15803D" if val > 0 else "#D12F19" if val < 0 else COLOR_MUTED
+    sign = "+" if val > 0 else ""
+    arrow = "▲" if val > 0 else "▼" if val < 0 else "—"
+    fmt = f".{decimals}f" if decimals else ","
+    val_str = f"{val:{fmt}}" if not suffix else f"{val:{fmt}}{suffix}"
+    return (
+        f'<div style="font-size:0.76rem;font-weight:600;color:{color};'
+        f'margin-top:8px;letter-spacing:0.01em;">'
+        f'{arrow} {sign}{val_str} vs período ant.</div>'
     )
 
-col5.metric("Antigüedad media bajas", f"{antiguedad} m" if antiguedad is not None else "—")
+
+_umbral_hint = (
+    f'<div style="font-size:0.65rem;color:{COLOR_MUTED};margin-top:6px;line-height:1.3;">'
+    f'Umbral: {umbral_hist:.1f}% &nbsp;·&nbsp; Media: {media_hist:.1f}%</div>'
+) if media_hist > 0 else ""
+
+_tasa_badge = (
+    f'<div style="margin-top:10px;">'
+    f'<span style="display:inline-block;background:{_tasa_color}18;color:{_tasa_color};'
+    f'font-size:0.66rem;font-weight:700;letter-spacing:0.06em;text-transform:uppercase;'
+    f'padding:3px 8px;border-radius:4px;border:1px solid {_tasa_color}40;">'
+    f'{_tasa_estado}</span></div>'
+)
+
+st.markdown(f"""
+<div style="background:{COLOR_SURFACE};border-left:5px solid {COLOR_PRIMARY};
+            padding:22px 28px 20px;border-radius:0 12px 12px 0;
+            box-shadow:0 2px 12px rgba(0,0,0,0.07);margin-bottom:24px;
+            display:flex;align-items:center;justify-content:space-between;
+            gap:16px;flex-wrap:wrap;">
+  <div>
+    <div style="font-size:0.63rem;font-weight:700;color:{COLOR_MUTED};text-transform:uppercase;
+                letter-spacing:0.12em;margin-bottom:6px;">Grupo Master — Dashboard RRHH</div>
+    <h1 style="margin:0 0 5px;font-size:2.1rem;font-weight:800;color:{COLOR_TEXT};
+               font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;
+               letter-spacing:-0.025em;line-height:1.1;">
+      Rotación de Personal
+    </h1>
+    <p style="margin:0;color:{COLOR_MUTED};font-size:0.76rem;">
+      Datos actualizados cada hora desde la API de MasterBus
+      &nbsp;·&nbsp; Fórmula: Bajas / Plantilla al inicio del período
+    </p>
+  </div>
+  <div style="background:{COLOR_BG};border:1px solid {COLOR_BORDER};border-radius:12px;
+              padding:14px 24px;text-align:center;flex-shrink:0;">
+    <div style="font-size:0.6rem;font-weight:700;color:{COLOR_MUTED};
+                text-transform:uppercase;letter-spacing:0.12em;margin-bottom:4px;">Período activo</div>
+    <div style="font-size:1.5rem;font-weight:800;color:{COLOR_PRIMARY};
+                font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;letter-spacing:-0.01em;">
+      {label_periodo}
+    </div>
+  </div>
+</div>
+
+<div style="display:grid;grid-template-columns:repeat(5,1fr);gap:14px;margin-bottom:8px;">
+
+  <div style="background:{COLOR_SURFACE};border:1px solid {COLOR_BORDER};
+              border-top:3px solid {COLOR_PRIMARY};border-radius:10px;
+              padding:22px 18px 18px;box-shadow:0 1px 5px rgba(0,0,0,0.04);">
+    <div style="font-size:0.62rem;font-weight:700;color:{COLOR_MUTED};
+                text-transform:uppercase;letter-spacing:0.09em;margin-bottom:10px;">
+      Plantilla al inicio
+    </div>
+    <div style="font-size:2.6rem;font-weight:800;color:{COLOR_TEXT};
+                line-height:1;letter-spacing:-0.025em;font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;">
+      {n_plantilla:,}
+    </div>
+    {_delta_html(delta_plantilla)}
+  </div>
+
+  <div style="background:{COLOR_SURFACE};border:1px solid {COLOR_BORDER};
+              border-top:3px solid {COLOR_PRIMARY};border-radius:10px;
+              padding:22px 18px 18px;box-shadow:0 1px 5px rgba(0,0,0,0.04);">
+    <div style="font-size:0.62rem;font-weight:700;color:{COLOR_MUTED};
+                text-transform:uppercase;letter-spacing:0.09em;margin-bottom:10px;">
+      Bajas del período
+    </div>
+    <div style="font-size:2.6rem;font-weight:800;color:{COLOR_TEXT};
+                line-height:1;letter-spacing:-0.025em;font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;">
+      {n_bajas:,}
+    </div>
+    {_delta_html(delta_bajas, inverse=True)}
+  </div>
+
+  <div style="background:{COLOR_SURFACE};border:1px solid {COLOR_BORDER};
+              border-top:3px solid {COLOR_PRIMARY};border-radius:10px;
+              padding:22px 18px 18px;box-shadow:0 1px 5px rgba(0,0,0,0.04);">
+    <div style="font-size:0.62rem;font-weight:700;color:{COLOR_MUTED};
+                text-transform:uppercase;letter-spacing:0.09em;margin-bottom:10px;">
+      Altas del período
+    </div>
+    <div style="font-size:2.6rem;font-weight:800;color:{COLOR_TEXT};
+                line-height:1;letter-spacing:-0.025em;font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;">
+      {n_altas:,}
+    </div>
+    {_delta_html(delta_altas)}
+  </div>
+
+  <div style="background:{COLOR_SURFACE};border:1px solid {COLOR_BORDER};
+              border-top:3px solid {_tasa_color};border-radius:10px;
+              padding:22px 18px 18px;box-shadow:0 1px 5px rgba(0,0,0,0.04);">
+    <div style="font-size:0.62rem;font-weight:700;color:{COLOR_MUTED};
+                text-transform:uppercase;letter-spacing:0.09em;margin-bottom:10px;">
+      Tasa de Rotación
+    </div>
+    <div style="font-size:2.6rem;font-weight:800;color:{COLOR_TEXT};
+                line-height:1;letter-spacing:-0.025em;font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;">
+      {tasa:.1f}%
+    </div>
+    {_delta_html(delta_tasa, inverse=True, suffix="pp", decimals=1)}{_tasa_badge}
+    {_umbral_hint}
+  </div>
+
+  <div style="background:{COLOR_SURFACE};border:1px solid {COLOR_BORDER};
+              border-top:3px solid {COLOR_SECONDARY};border-radius:10px;
+              padding:22px 18px 18px;box-shadow:0 1px 5px rgba(0,0,0,0.04);">
+    <div style="font-size:0.62rem;font-weight:700;color:{COLOR_MUTED};
+                text-transform:uppercase;letter-spacing:0.09em;margin-bottom:10px;">
+      Antigüedad media bajas
+    </div>
+    <div style="font-size:2.6rem;font-weight:800;color:{COLOR_TEXT};
+                line-height:1;letter-spacing:-0.025em;font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;">
+      {f"{antiguedad}" if antiguedad is not None else "—"}
+    </div>
+    <div style="font-size:0.76rem;color:{COLOR_MUTED};margin-top:6px;">meses promedio</div>
+  </div>
+
+</div>
+""", unsafe_allow_html=True)
 
 st.divider()
 
@@ -327,9 +663,19 @@ elif tasa > media_hist and media_hist > 0:
     )
 
 # ─── Evolución temporal ──────────────────────────────────────
-st.subheader("Evolución de la Rotación")
+st.markdown(f"""
+<div style="display:flex;align-items:center;gap:8px;margin:12px 0 8px;">
+  <div style="width:3px;height:18px;background:{COLOR_PRIMARY};border-radius:2px;"></div>
+  <span style="font-weight:700;font-size:1rem;color:{COLOR_TEXT};">Evolución de la Rotación</span>
+</div>
+""", unsafe_allow_html=True)
 
 df_serie = df_serie_alertas
+
+_ann = dict(
+    annotation_bgcolor="rgba(255,255,255,0.92)",
+    annotation_font_color=COLOR_MUTED,
+)
 
 tab_tasa, tab_volumen = st.tabs(["Tasa de Rotación (%)", "Altas y Bajas"])
 
@@ -340,36 +686,37 @@ with tab_tasa:
         y=df_serie["tasa"],
         mode="lines+markers",
         name="Tasa",
-        line=dict(color=COLOR_MASTER, width=2.5),
-        marker=dict(size=7),
+        line=dict(color=COLOR_PRIMARY, width=2.5),
+        fill="tozeroy",
+        fillcolor="rgba(237,93,59,0.07)",
+        marker=dict(size=6, color=COLOR_PRIMARY, line=dict(color=COLOR_SURFACE, width=1.5)),
         hovertemplate="%{y:.1f}%<extra></extra>",
     ))
     if media_hist > 0:
         fig_linea.add_hline(
             y=media_hist,
             line_dash="dot",
-            line_color="#888",
+            line_color=COLOR_ACCENT,
             annotation_text=f"Media {media_hist:.1f}%",
             annotation_position="bottom right",
-            annotation_bgcolor="rgba(30,30,30,0.85)",
-            annotation_font_color="#aaa",
+            **_ann,
         )
         fig_linea.add_hline(
             y=umbral_hist,
             line_dash="dash",
-            line_color="#e74c3c",
+            line_color=COLOR_DANGER,
             annotation_text=f"Umbral {umbral_hist:.1f}%",
             annotation_position="top right",
-            annotation_bgcolor="rgba(30,30,30,0.85)",
-            annotation_font_color="#ff6b6b",
+            annotation_bgcolor="rgba(255,255,255,0.92)",
+            annotation_font_color=COLOR_DANGER,
         )
     fig_linea.update_layout(
-        hovermode="x unified",
-        yaxis_ticksuffix="%",
-        xaxis=dict(showgrid=False),
-        yaxis=dict(showgrid=True, gridcolor="#333", rangemode="tozero"),
-        height=350,
-        showlegend=False,
+        **_chart_base(
+            hovermode="x unified",
+            yaxis_ticksuffix="%",
+            height=360,
+            showlegend=False,
+        )
     )
     st.plotly_chart(fig_linea, use_container_width=True)
 
@@ -380,25 +727,31 @@ with tab_volumen:
         y=["altas", "bajas"],
         barmode="group",
         labels={"value": "Empleados", "periodo_dt": "", "variable": ""},
-        color_discrete_map={"altas": "#2ecc71", "bajas": COLOR_MASTER},
+        color_discrete_map={"altas": COLOR_SECONDARY, "bajas": COLOR_PRIMARY},
     )
     fig_barras.update_layout(
-        hovermode="x unified",
-        xaxis=dict(showgrid=False),
-        yaxis=dict(showgrid=True, gridcolor="#333"),
-        height=380,
-        margin=dict(b=60),
-        legend=dict(
-            orientation="h",
-            yanchor="top", y=-0.18,
-            xanchor="center", x=0.5,
-        ),
+        **_chart_base(
+            hovermode="x unified",
+            height=390,
+            margin=dict(l=10, r=10, t=20, b=70),
+            legend=dict(
+                orientation="h",
+                yanchor="top", y=-0.14,
+                xanchor="center", x=0.5,
+                font=dict(color=COLOR_MUTED, size=12),
+            ),
+        )
     )
     st.plotly_chart(fig_barras, use_container_width=True)
 
 # ─── Mapa de calor ───────────────────────────────────────────
 st.divider()
-st.subheader("Mapa de Calor — Tasa de Rotación por Mes y Año")
+st.markdown(f"""
+<div style="display:flex;align-items:center;gap:8px;margin:12px 0 4px;">
+  <div style="width:3px;height:18px;background:{COLOR_SECONDARY};border-radius:2px;"></div>
+  <span style="font-weight:700;font-size:1rem;color:{COLOR_TEXT};">Mapa de Calor — Tasa de Rotación por Mes y Año</span>
+</div>
+""", unsafe_allow_html=True)
 st.caption("Cada celda muestra la tasa de rotación (%). Verde = baja, amarillo = moderada, rojo = elevada.")
 
 df_heat = calcular_heatmap_data(df)
@@ -410,63 +763,93 @@ fig_heat = go.Figure(go.Heatmap(
     z=z_heat,
     x=años_heat,
     y=meses_heat,
-    colorscale=[[0, "#27ae60"], [0.5, "#f39c12"], [1, "#e74c3c"]],
+    colorscale=[[0, "#22C55E"], [0.5, "#F59E0B"], [1, COLOR_DANGER]],
     text=[[f"{v:.1f}%" if pd.notna(v) else "" for v in fila] for fila in z_heat],
     texttemplate="%{text}",
-    textfont={"size": 11, "color": "white"},
+    textfont={
+        "size": 11,
+        "color": COLOR_TEXT,
+        "family": "Helvetica Neue, Helvetica, Arial, sans-serif",
+    },
     hovertemplate="%{y} %{x}: %{z:.1f}%<extra></extra>",
     showscale=True,
-    colorbar=dict(title="Tasa %", ticksuffix="%"),
+    colorbar=dict(
+        title=dict(
+            text="Tasa %",
+            font=dict(color=COLOR_MUTED, family="Helvetica Neue, Arial, sans-serif"),
+        ),
+        ticksuffix="%",
+        tickfont=dict(color=COLOR_MUTED, family="Helvetica Neue, Arial, sans-serif"),
+        bgcolor="rgba(0,0,0,0)",
+        bordercolor=COLOR_BORDER,
+    ),
 ))
 fig_heat.update_layout(
-    height=420,
-    xaxis=dict(side="top", tickmode="linear"),
-    yaxis=dict(autorange="reversed"),
-    margin=dict(l=10, r=80, t=40, b=10),
+    **_chart_base(
+        height=430,
+        xaxis=dict(
+            side="top", tickmode="linear", showgrid=False,
+            color=COLOR_MUTED, showline=False,
+        ),
+        yaxis=dict(
+            autorange="reversed", showgrid=False,
+            color=COLOR_MUTED, showline=False,
+        ),
+        margin=dict(l=10, r=80, t=40, b=10),
+    )
 )
 st.plotly_chart(fig_heat, use_container_width=True)
 
 # ─── Desgloses ───────────────────────────────────────────────
 st.divider()
-st.subheader(f"Desglose de Bajas — {label_periodo}")
+st.markdown(f"""
+<div style="display:flex;align-items:center;gap:8px;margin:12px 0 8px;">
+  <div style="width:3px;height:18px;background:{COLOR_PRIMARY};border-radius:2px;"></div>
+  <span style="font-weight:700;font-size:1rem;color:{COLOR_TEXT};">Desglose de Bajas — {label_periodo}</span>
+</div>
+""", unsafe_allow_html=True)
 
 col_izq, col_der = st.columns(2)
 
 with col_izq:
-    st.markdown("**Por Cargo**")
+    st.markdown(f'<p style="font-weight:600;font-size:13px;color:{COLOR_TEXT};margin-bottom:4px;">Por Cargo</p>', unsafe_allow_html=True)
     if not df_bajas.empty:
         bc = df_bajas["cargo"].value_counts().reset_index()
         bc.columns = ["cargo", "bajas"]
         fig = px.bar(
             bc, x="bajas", y="cargo", orientation="h",
-            color_discrete_sequence=[COLOR_MASTER],
+            color_discrete_sequence=[COLOR_PRIMARY],
             labels={"bajas": "Bajas", "cargo": ""},
         )
         fig.update_layout(
-            yaxis=dict(autorange="reversed"),
-            xaxis=dict(showgrid=True, gridcolor="#333"),
-            height=max(250, len(bc) * 32),
-            margin=dict(l=0, r=10, t=10, b=10),
+            **_chart_base(
+                yaxis=dict(autorange="reversed", showgrid=False, color=COLOR_MUTED, showline=False),
+                xaxis=dict(showgrid=True, gridcolor="#E8E8E8", color=COLOR_MUTED, showline=False),
+                height=max(260, len(bc) * 34),
+                margin=dict(l=0, r=10, t=10, b=10),
+            )
         )
         st.plotly_chart(fig, use_container_width=True)
     else:
         st.info("Sin bajas en este período.")
 
 with col_der:
-    st.markdown("**Por Sector**")
+    st.markdown(f'<p style="font-weight:600;font-size:13px;color:{COLOR_TEXT};margin-bottom:4px;">Por Sector</p>', unsafe_allow_html=True)
     if not df_bajas.empty:
         bs = df_bajas["str"].value_counts().reset_index()
         bs.columns = ["sector", "bajas"]
         fig = px.bar(
             bs, x="bajas", y="sector", orientation="h",
-            color_discrete_sequence=[COLOR_MASTER],
+            color_discrete_sequence=[COLOR_SECONDARY],
             labels={"bajas": "Bajas", "sector": ""},
         )
         fig.update_layout(
-            yaxis=dict(autorange="reversed"),
-            xaxis=dict(showgrid=True, gridcolor="#333"),
-            height=max(250, len(bs) * 32),
-            margin=dict(l=0, r=10, t=10, b=10),
+            **_chart_base(
+                yaxis=dict(autorange="reversed", showgrid=False, color=COLOR_MUTED, showline=False),
+                xaxis=dict(showgrid=True, gridcolor="#E8E8E8", color=COLOR_MUTED, showline=False),
+                height=max(260, len(bs) * 34),
+                margin=dict(l=0, r=10, t=10, b=10),
+            )
         )
         st.plotly_chart(fig, use_container_width=True)
     else:
@@ -474,45 +857,63 @@ with col_der:
 
 # ─── Evolución por empresa ───────────────────────────────────
 st.divider()
-st.subheader("Evolución por Empresa del Grupo")
+st.markdown(f"""
+<div style="display:flex;align-items:center;gap:8px;margin:12px 0 8px;">
+  <div style="width:3px;height:18px;background:{COLOR_ACCENT};border-radius:2px;"></div>
+  <span style="font-weight:700;font-size:1rem;color:{COLOR_TEXT};">Evolución por Empresa del Grupo</span>
+</div>
+""", unsafe_allow_html=True)
+st.caption("Solo se muestran empresas con 5 o más empleados en el período seleccionado.")
 
 series_emp = calcular_serie_por_empresa(df, vista)
 
+# Paleta coherente con el branding MasterBus
+COLORES_EMP = [
+    COLOR_PRIMARY,   # #ED5D3B naranja-rojo
+    COLOR_SECONDARY, # #46BCD2 teal
+    "#8C8987",       # gris acento
+    "#D12F19",       # rojo
+    "#2E86AB",       # azul
+    "#6B4E9E",       # violeta
+    "#F4A261",       # ámbar
+    "#52B788",       # verde
+]
+
 if series_emp:
     fig_emp = go.Figure()
-    colores = px.colors.qualitative.Set2
     for i, (empresa, serie) in enumerate(series_emp.items()):
+        color = COLORES_EMP[i % len(COLORES_EMP)]
         fig_emp.add_trace(go.Scatter(
             x=serie["periodo_dt"],
             y=serie["tasa"],
             mode="lines+markers",
             name=empresa,
-            line=dict(color=colores[i % len(colores)], width=2),
-            marker=dict(size=5),
+            line=dict(color=color, width=2),
+            marker=dict(size=5, color=color),
             hovertemplate=f"{empresa}<br>%{{y:.1f}}%<extra></extra>",
         ))
     if media_hist > 0:
         fig_emp.add_hline(
             y=media_hist,
             line_dash="dot",
-            line_color="#888",
+            line_color=COLOR_ACCENT,
             annotation_text=f"Media global {media_hist:.1f}%",
             annotation_position="bottom right",
-            annotation_bgcolor="rgba(30,30,30,0.85)",
-            annotation_font_color="#aaa",
+            **_ann,
         )
     fig_emp.update_layout(
-        hovermode="x unified",
-        yaxis_ticksuffix="%",
-        xaxis=dict(showgrid=False),
-        yaxis=dict(showgrid=True, gridcolor="#333", rangemode="tozero"),
-        height=430,
-        margin=dict(b=80),
-        legend=dict(
-            orientation="h",
-            yanchor="top", y=-0.18,
-            xanchor="center", x=0.5,
-        ),
+        **_chart_base(
+            hovermode="x unified",
+            yaxis_ticksuffix="%",
+            height=440,
+            margin=dict(l=10, r=10, t=20, b=90),
+            legend=dict(
+                orientation="h",
+                yanchor="top", y=-0.18,
+                xanchor="center", x=0.5,
+                font=dict(color=COLOR_MUTED, size=11),
+            ),
+        )
     )
     st.plotly_chart(fig_emp, use_container_width=True)
 else:
@@ -520,7 +921,12 @@ else:
 
 # ─── Tabla de detalle ────────────────────────────────────────
 st.divider()
-st.subheader(f"Detalle de Bajas — {label_periodo}")
+st.markdown(f"""
+<div style="display:flex;align-items:center;gap:8px;margin:12px 0 8px;">
+  <div style="width:3px;height:18px;background:{COLOR_SECONDARY};border-radius:2px;"></div>
+  <span style="font-weight:700;font-size:1rem;color:{COLOR_TEXT};">Detalle de Bajas — {label_periodo}</span>
+</div>
+""", unsafe_allow_html=True)
 
 COLS = {
     "legajo": "Legajo",
@@ -541,7 +947,7 @@ if not df_bajas.empty:
     )
     st.dataframe(tabla, use_container_width=True, hide_index=True)
     st.download_button(
-        "⬇️ Descargar CSV",
+        f"Descargar CSV — {label_periodo}",
         data=tabla.to_csv(index=False).encode("utf-8"),
         file_name=f"bajas_{label_periodo.replace(' ', '_')}.csv",
         mime="text/csv",
