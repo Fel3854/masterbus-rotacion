@@ -28,7 +28,6 @@ jobs:
           SMTP_USER: ${{ secrets.SMTP_USER }}
           SMTP_PASSWORD: ${{ secrets.SMTP_PASSWORD }}
           SMTP_USE_TLS: ${{ secrets.SMTP_USE_TLS }}
-          MASTERBUS_API_URL: ${{ secrets.MASTERBUS_API_URL }}
           ALERTA_DIA_MIN: "150"
           ALERTA_DIA_MAX: "180"
         run: python3 datos/alerta_periodo_prueba/main.py --dry-run
