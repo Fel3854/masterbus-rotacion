@@ -30,4 +30,4 @@ jobs:
           SMTP_USE_TLS: ${{ secrets.SMTP_USE_TLS }}
           ALERTA_DIA_MIN: "150"
           ALERTA_DIA_MAX: "180"
-        run: python3 datos/alerta_periodo_prueba/main.py --dry-run
+        run: python3 datos/alerta_periodo_prueba/main.py
