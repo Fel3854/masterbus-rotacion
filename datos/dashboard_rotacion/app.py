@@ -56,12 +56,12 @@ MESES = {
 
 # ─── Helper de layout de gráficos ────────────────────────────
 def _chart_base(**overrides):
-    """Tokens de diseño compartidos — branding MasterBus light mode."""
+    """Tokens de diseño compartidos — branding MasterBus."""
     base = dict(
         paper_bgcolor="rgba(0,0,0,0)",
         plot_bgcolor=COLOR_SURFACE,
         font=dict(
-            family="'Helvetica Neue', Helvetica, Arial, Verdana, sans-serif",
+            family="'Fira Sans', sans-serif",
             color=COLOR_MUTED,
             size=12,
         ),
@@ -78,7 +78,7 @@ def _chart_base(**overrides):
             bgcolor=COLOR_SURFACE,
             bordercolor=COLOR_BORDER,
             font=dict(
-                family="'Helvetica Neue', Helvetica, Arial, sans-serif",
+                family="'Fira Sans', sans-serif",
                 color=COLOR_TEXT,
                 size=12,
             ),
@@ -112,18 +112,31 @@ def cargar_datos():
     df["fecha_fin"] = df["fechafin"].apply(_parse_fecha)
     df = df[df["fecha_inicio"].notna()].copy()
 
-    df["cargo"] = df["cargo"].str.strip().str.upper()
-    df["str"] = df["str"].str.strip()
+    df["cargo"]  = df["cargo"].str.strip().str.upper()
+    df["str"]    = df["str"].str.strip()
+    df["activo"] = df["activo"].astype(str)
 
     return df, datetime.now()
 
 
 def calcular_rotacion(df, inicio, fin):
     """Plantilla al inicio del período + bajas + altas + tasa."""
-    plantilla = df[
-        (df["fecha_inicio"] < inicio)
-        & (df["fecha_fin"].isna() | (df["fecha_fin"] >= inicio))
-    ]
+    hoy = date.today()
+    if fin >= hoy:
+        # Período en curso: excluir inactivos sin fecha de baja registrada
+        plantilla = df[
+            (df["fecha_inicio"] < inicio)
+            & (
+                (df["activo"] == "1")
+                | (df["fecha_fin"].notna() & (df["fecha_fin"] >= inicio))
+            )
+        ]
+    else:
+        # Período histórico: solo criterio de fechas
+        plantilla = df[
+            (df["fecha_inicio"] < inicio)
+            & (df["fecha_fin"].isna() | (df["fecha_fin"] >= inicio))
+        ]
     bajas = df[
         df["fecha_fin"].notna()
         & (df["fecha_fin"] >= inicio)
@@ -240,14 +253,16 @@ def calcular_serie_por_empresa(df, vista):
 # ─── Estilos — Branding MasterBus ────────────────────────────
 st.markdown(f"""
 <style>
-/* Typography: sistema MasterBus — Arial / Helvetica Neue */
+@import url('https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;500;600;700&family=Fira+Sans:wght@300;400;500;600;700&display=swap');
+
+/* Typography: Fira Sans general */
 html, body, [class*="st-"], p, span, label, div, button, input, select {{
-    font-family: 'Helvetica Neue', Helvetica, Arial, Verdana, sans-serif !important;
-    font-size: 13px;
+    font-family: 'Fira Sans', sans-serif !important;
+    font-size: 15px;
     color: {COLOR_TEXT};
 }}
 
-/* Fondo general */
+/* Forzar modo oscuro general si hay backgrounds por default */
 .stApp {{
     background-color: {COLOR_BG} !important;
 }}
@@ -271,6 +286,7 @@ html, body, [class*="st-"], p, span, label, div, button, input, select {{
     box-shadow: 0 2px 8px rgba(237,93,59,0.15);
 }}
 [data-testid="stMetricValue"] {{
+    font-family: 'Fira Code', monospace !important;
     font-size: 1.9rem !important;
     font-weight: 700 !important;
     color: {COLOR_TEXT} !important;
@@ -278,7 +294,7 @@ html, body, [class*="st-"], p, span, label, div, button, input, select {{
 }}
 [data-testid="stMetricLabel"] {{
     color: {COLOR_MUTED} !important;
-    font-size: 0.72rem !important;
+    font-size: 0.85rem !important;
     text-transform: uppercase;
     letter-spacing: 0.06em;
     font-weight: 600;
@@ -298,7 +314,7 @@ html, body, [class*="st-"], p, span, label, div, button, input, select {{
     color: #FFFFFF !important;
     border: 1px solid #474747 !important;
     border-radius: 4px !important;
-    font-size: 13px !important;
+    font-size: 15px !important;
     font-weight: 600 !important;
     transition: background-color 0.15s ease !important;
 }}
@@ -313,7 +329,7 @@ html, body, [class*="st-"], p, span, label, div, button, input, select {{
     color: {COLOR_TEXT} !important;
     border: 1px solid {COLOR_BORDER} !important;
     border-radius: 4px !important;
-    font-size: 13px !important;
+    font-size: 15px !important;
 }}
 .stDownloadButton > button:hover {{
     border-color: {COLOR_PRIMARY} !important;
@@ -331,7 +347,7 @@ hr {{
 /* Alerts */
 [data-testid="stAlert"] {{
     border-radius: 4px !important;
-    font-size: 13px;
+    font-size: 15px;
     border-left-width: 4px;
 }}
 
@@ -346,7 +362,7 @@ hr {{
 .stTabs [data-baseweb="tab"] {{
     border-radius: 6px;
     color: {COLOR_MUTED};
-    font-size: 13px;
+    font-size: 15px;
     font-weight: 600;
     padding: 8px 20px !important;
     min-height: 36px !important;
@@ -366,7 +382,7 @@ hr {{
     border-color: {COLOR_BORDER} !important;
     border-radius: 4px !important;
     color: {COLOR_TEXT} !important;
-    font-size: 13px !important;
+    font-size: 15px !important;
 }}
 
 /* Control principal y todos sus hijos */
@@ -384,7 +400,7 @@ hr {{
 [data-baseweb="select"] input {{
     color: {COLOR_TEXT} !important;
     background-color: transparent !important;
-    font-size: 13px !important;
+    font-size: 15px !important;
 }}
 
 /* Ícono de chevron */
@@ -406,7 +422,7 @@ ul[data-baseweb="menu"] {{
 [data-baseweb="option"] {{
     background-color: {COLOR_SURFACE} !important;
     color: {COLOR_TEXT} !important;
-    font-size: 13px !important;
+    font-size: 15px !important;
 }}
 [role="option"]:hover,
 [data-baseweb="option"]:hover {{
@@ -429,7 +445,7 @@ ul[data-baseweb="menu"] {{
 /* Captions */
 .stCaption, [data-testid="stCaptionContainer"] {{
     color: {COLOR_MUTED} !important;
-    font-size: 12px !important;
+    font-size: 13px !important;
 }}
 
 /* Dataframe */
@@ -580,21 +596,21 @@ def _delta_html(val, inverse=False, suffix="", decimals=0):
     fmt = f".{decimals}f" if decimals else ","
     val_str = f"{val:{fmt}}" if not suffix else f"{val:{fmt}}{suffix}"
     return (
-        f'<div style="font-size:0.76rem;font-weight:600;color:{color};'
+        f'<div style="font-size:0.88rem;font-weight:600;color:{color};'
         f'margin-top:8px;letter-spacing:0.01em;">'
         f'{arrow} {sign}{val_str} vs período ant.</div>'
     )
 
 
 _umbral_hint = (
-    f'<div style="font-size:0.65rem;color:{COLOR_MUTED};margin-top:6px;line-height:1.3;">'
+    f'<div style="font-size:0.76rem;color:{COLOR_MUTED};margin-top:6px;line-height:1.3;">'
     f'Umbral: {umbral_hist:.1f}% &nbsp;·&nbsp; Media: {media_hist:.1f}%</div>'
 ) if media_hist > 0 else ""
 
 _tasa_badge = (
     f'<div style="margin-top:10px;">'
     f'<span style="display:inline-block;background:{_tasa_color}18;color:{_tasa_color};'
-    f'font-size:0.66rem;font-weight:700;letter-spacing:0.06em;text-transform:uppercase;'
+    f'font-size:0.78rem;font-weight:700;letter-spacing:0.06em;text-transform:uppercase;'
     f'padding:3px 8px;border-radius:4px;border:1px solid {_tasa_color}40;">'
     f'{_tasa_estado}</span></div>'
 )
@@ -606,24 +622,24 @@ st.markdown(f"""
             display:flex;align-items:center;justify-content:space-between;
             gap:16px;flex-wrap:wrap;">
   <div>
-    <div style="font-size:0.63rem;font-weight:700;color:{COLOR_MUTED};text-transform:uppercase;
+    <div style="font-size:0.75rem;font-weight:700;color:{COLOR_MUTED};text-transform:uppercase;
                 letter-spacing:0.12em;margin-bottom:6px;">Grupo Master — Dashboard RRHH</div>
     <h1 style="margin:0 0 5px;font-size:2.1rem;font-weight:800;color:{COLOR_TEXT};
-               font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;
+               font-family:'Fira Code', monospace;
                letter-spacing:-0.025em;line-height:1.1;">
       Rotación de Personal
     </h1>
-    <p style="margin:0;color:{COLOR_MUTED};font-size:0.76rem;">
+    <p style="margin:0;color:{COLOR_MUTED};font-size:0.88rem;">
       Datos actualizados cada hora desde la API de MasterBus
       &nbsp;·&nbsp; Fórmula: Bajas / Plantilla al inicio del período
     </p>
   </div>
   <div style="background:{COLOR_BG};border:1px solid {COLOR_BORDER};border-radius:12px;
               padding:14px 24px;text-align:center;flex-shrink:0;">
-    <div style="font-size:0.6rem;font-weight:700;color:{COLOR_MUTED};
+    <div style="font-size:0.72rem;font-weight:700;color:{COLOR_MUTED};
                 text-transform:uppercase;letter-spacing:0.12em;margin-bottom:4px;">Período activo</div>
     <div style="font-size:1.5rem;font-weight:800;color:{COLOR_PRIMARY};
-                font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;letter-spacing:-0.01em;">
+                font-family:'Fira Code', monospace;letter-spacing:-0.01em;">
       {label_periodo}
     </div>
   </div>
@@ -634,12 +650,12 @@ st.markdown(f"""
   <div style="background:{COLOR_SURFACE};border:1px solid {COLOR_BORDER};
               border-top:3px solid {COLOR_PRIMARY};border-radius:10px;
               padding:22px 18px 18px;box-shadow:0 1px 5px rgba(0,0,0,0.04);">
-    <div style="font-size:0.62rem;font-weight:700;color:{COLOR_MUTED};
+    <div style="font-size:0.75rem;font-weight:700;color:{COLOR_MUTED};
                 text-transform:uppercase;letter-spacing:0.09em;margin-bottom:10px;">
       Plantilla al inicio
     </div>
     <div style="font-size:2.6rem;font-weight:800;color:{COLOR_TEXT};
-                line-height:1;letter-spacing:-0.025em;font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;">
+                line-height:1;letter-spacing:-0.025em;font-family:'Fira Code', monospace;">
       {n_plantilla:,}
     </div>
     {_delta_html(delta_plantilla)}
@@ -648,12 +664,12 @@ st.markdown(f"""
   <div style="background:{COLOR_SURFACE};border:1px solid {COLOR_BORDER};
               border-top:3px solid {COLOR_PRIMARY};border-radius:10px;
               padding:22px 18px 18px;box-shadow:0 1px 5px rgba(0,0,0,0.04);">
-    <div style="font-size:0.62rem;font-weight:700;color:{COLOR_MUTED};
+    <div style="font-size:0.75rem;font-weight:700;color:{COLOR_MUTED};
                 text-transform:uppercase;letter-spacing:0.09em;margin-bottom:10px;">
       Bajas del período
     </div>
     <div style="font-size:2.6rem;font-weight:800;color:{COLOR_TEXT};
-                line-height:1;letter-spacing:-0.025em;font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;">
+                line-height:1;letter-spacing:-0.025em;font-family:'Fira Code', monospace;">
       {n_bajas:,}
     </div>
     {_delta_html(delta_bajas, inverse=True)}
@@ -662,12 +678,12 @@ st.markdown(f"""
   <div style="background:{COLOR_SURFACE};border:1px solid {COLOR_BORDER};
               border-top:3px solid {COLOR_PRIMARY};border-radius:10px;
               padding:22px 18px 18px;box-shadow:0 1px 5px rgba(0,0,0,0.04);">
-    <div style="font-size:0.62rem;font-weight:700;color:{COLOR_MUTED};
+    <div style="font-size:0.75rem;font-weight:700;color:{COLOR_MUTED};
                 text-transform:uppercase;letter-spacing:0.09em;margin-bottom:10px;">
       Altas del período
     </div>
     <div style="font-size:2.6rem;font-weight:800;color:{COLOR_TEXT};
-                line-height:1;letter-spacing:-0.025em;font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;">
+                line-height:1;letter-spacing:-0.025em;font-family:'Fira Code', monospace;">
       {n_altas:,}
     </div>
     {_delta_html(delta_altas)}
@@ -676,12 +692,12 @@ st.markdown(f"""
   <div style="background:{COLOR_SURFACE};border:1px solid {COLOR_BORDER};
               border-top:3px solid {_tasa_color};border-radius:10px;
               padding:22px 18px 18px;box-shadow:0 1px 5px rgba(0,0,0,0.04);">
-    <div style="font-size:0.62rem;font-weight:700;color:{COLOR_MUTED};
+    <div style="font-size:0.75rem;font-weight:700;color:{COLOR_MUTED};
                 text-transform:uppercase;letter-spacing:0.09em;margin-bottom:10px;">
       Tasa de Rotación
     </div>
     <div style="font-size:2.6rem;font-weight:800;color:{COLOR_TEXT};
-                line-height:1;letter-spacing:-0.025em;font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;">
+                line-height:1;letter-spacing:-0.025em;font-family:'Fira Code', monospace;">
       {tasa:.1f}%
     </div>
     {_delta_html(delta_tasa, inverse=True, suffix="pp", decimals=1)}{_tasa_badge}
@@ -691,15 +707,15 @@ st.markdown(f"""
   <div style="background:{COLOR_SURFACE};border:1px solid {COLOR_BORDER};
               border-top:3px solid {COLOR_SECONDARY};border-radius:10px;
               padding:22px 18px 18px;box-shadow:0 1px 5px rgba(0,0,0,0.04);">
-    <div style="font-size:0.62rem;font-weight:700;color:{COLOR_MUTED};
+    <div style="font-size:0.75rem;font-weight:700;color:{COLOR_MUTED};
                 text-transform:uppercase;letter-spacing:0.09em;margin-bottom:10px;">
       Antigüedad media bajas
     </div>
     <div style="font-size:2.6rem;font-weight:800;color:{COLOR_TEXT};
-                line-height:1;letter-spacing:-0.025em;font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;">
+                line-height:1;letter-spacing:-0.025em;font-family:'Fira Code', monospace;">
       {f"{antiguedad}" if antiguedad is not None else "—"}
     </div>
-    <div style="font-size:0.76rem;color:{COLOR_MUTED};margin-top:6px;">meses promedio</div>
+    <div style="font-size:0.88rem;color:{COLOR_MUTED};margin-top:6px;">meses promedio</div>
   </div>
 
 </div>
@@ -800,61 +816,7 @@ with tab_volumen:
     )
     st.plotly_chart(fig_barras, use_container_width=True)
 
-# ─── Mapa de calor ───────────────────────────────────────────
-st.divider()
-st.markdown(f"""
-<div style="display:flex;align-items:center;gap:8px;margin:12px 0 4px;">
-  <div style="width:3px;height:18px;background:{COLOR_SECONDARY};border-radius:2px;"></div>
-  <span style="font-weight:700;font-size:1rem;color:{COLOR_TEXT};">Mapa de Calor — Tasa de Rotación por Mes y Año</span>
-</div>
-""", unsafe_allow_html=True)
-st.caption("Cada celda muestra la tasa de rotación (%). Verde = baja, amarillo = moderada, rojo = elevada.")
 
-df_heat = calcular_heatmap_data(df)
-años_heat = df_heat.columns.tolist()
-meses_heat = df_heat.index.tolist()
-z_heat = df_heat.values.tolist()
-
-fig_heat = go.Figure(go.Heatmap(
-    z=z_heat,
-    x=años_heat,
-    y=meses_heat,
-    colorscale=[[0, "#22C55E"], [0.5, "#F59E0B"], [1, COLOR_DANGER]],
-    text=[[f"{v:.1f}%" if pd.notna(v) else "" for v in fila] for fila in z_heat],
-    texttemplate="%{text}",
-    textfont={
-        "size": 11,
-        "color": COLOR_TEXT,
-        "family": "Helvetica Neue, Helvetica, Arial, sans-serif",
-    },
-    hovertemplate="%{y} %{x}: %{z:.1f}%<extra></extra>",
-    showscale=True,
-    colorbar=dict(
-        title=dict(
-            text="Tasa %",
-            font=dict(color=COLOR_MUTED, family="Helvetica Neue, Arial, sans-serif"),
-        ),
-        ticksuffix="%",
-        tickfont=dict(color=COLOR_MUTED, family="Helvetica Neue, Arial, sans-serif"),
-        bgcolor="rgba(0,0,0,0)",
-        bordercolor=COLOR_BORDER,
-    ),
-))
-fig_heat.update_layout(
-    **_chart_base(
-        height=430,
-        xaxis=dict(
-            side="top", tickmode="linear", showgrid=False,
-            color=COLOR_MUTED, showline=False,
-        ),
-        yaxis=dict(
-            autorange="reversed", showgrid=False,
-            color=COLOR_MUTED, showline=False,
-        ),
-        margin=dict(l=10, r=80, t=40, b=10),
-    )
-)
-st.plotly_chart(fig_heat, use_container_width=True)
 
 # ─── Desgloses ───────────────────────────────────────────────
 st.divider()
@@ -1001,7 +963,16 @@ if not df_bajas.empty:
         .sort_values("Baja", ascending=False)
         .reset_index(drop=True)
     )
-    st.dataframe(tabla, use_container_width=True, hide_index=True)
+    # Fuente más grande para mejor lectura
+    st.markdown("""
+    <style>
+    [data-testid="stDataFrame"] table { font-size: 15px !important; }
+    [data-testid="stDataFrame"] th { font-size: 14px !important; font-weight: 700 !important; }
+    [data-testid="stDataFrame"] td { font-size: 15px !important; }
+    [data-testid="stDataFrameContainer"] { font-size: 15px !important; }
+    </style>
+    """, unsafe_allow_html=True)
+    st.dataframe(tabla, use_container_width=True, hide_index=True, height=500)
     st.download_button(
         f"Descargar CSV — {label_periodo}",
         data=tabla.to_csv(index=False).encode("utf-8"),
