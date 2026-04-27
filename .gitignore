@@ -1,6 +1,9 @@
 # Credenciales
 .env
 
+# Estado interno de automatizaciones
+datos/alerta_periodo_prueba/notificados.json
+
 # Python
 __pycache__/
 *.pyc

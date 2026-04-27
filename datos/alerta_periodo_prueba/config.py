@@ -33,8 +33,7 @@ SMTP_USER = get_env("SMTP_USER")
 SMTP_PASSWORD = get_env("SMTP_PASSWORD")
 SMTP_USE_TLS = get_env("SMTP_USE_TLS", default="true", required=False).lower() == "true"
 
-# --- Destinatario ---
-RRHH_EMAIL = get_env("RRHH_EMAIL")
+# --- Destinatario --- (el enrutamiento es por cargo, ver CARGO_GERENTE en main.py)
 
 # --- Detección ---
 # Rango en días para considerar "mes 5" del período de prueba

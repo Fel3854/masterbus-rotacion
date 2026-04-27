@@ -4,7 +4,7 @@ Alerta de Período de Prueba — Empleados en Mes 5
 
 Consume la API de empleados de MasterBus, detecta los que están
 cumpliendo su 5° mes de período de prueba y envía una alerta
-única por email a RRHH.
+al gerente responsable según el cargo del empleado.
 
 Uso:
     python main.py              # Ejecuta y envía emails
@@ -16,11 +16,12 @@ import json
 import logging
 import smtplib
 import sys
+from collections import defaultdict
 from datetime import datetime, date
-from typing import Dict, List, Optional
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from pathlib import Path
+from typing import Dict, List, Optional
 
 import requests
 
@@ -42,11 +43,75 @@ logger = logging.getLogger(__name__)
 NOTIFICADOS_FILE = Path(__file__).resolve().parent / "notificados.json"
 FECHAS_INVALIDAS = {"00/00/0000", "", None}
 
+# ─── Mapeo cargo → gerente responsable ──────────────────────
+CARGO_GERENTE = {
+    "ACTIVADOR":                                     "jcabral@masterbus.net",
+    "ADMINISTRADOR DE COORDINACION IT":              "icarvajal@masterbus.net",
+    "ADMINISTRATIVO":                                "dscirocco@masterbus.net",
+    "ASISTENTE ADM DE INTENDENCIA":                  "ellanos@masterbus.net",
+    "ASISTENTE ADM. DE RRHH":                        "ffillopski@masterbus.net",
+    "ASISTENTE ADMINISTRATIVO DE PAÃOL":             "jcabral@masterbus.net",
+    "ASISTENTE ADMINISTRATIVO DE SEGURIDAD VIAL":    "jcigna@masterbus.net",
+    "ASISTENTE ADMINISTRATIVO DE TALLER":            "asalvetti@masterbus.net",
+    "ASISTENTE BALANCE Y DOCUMENTACION DE BANCOS":   "dscirocco@masterbus.net",
+    "ASISTENTE CONTABLE":                            "dscirocco@masterbus.net",
+    "ASISTENTE DE ABASTECIMIENTO":                   "jcabral@masterbus.net",
+    "ASISTENTE DE GESTION":                          "dscirocco@masterbus.net",
+    "ASISTENTE DE LICITACIONES":                     "dscirocco@masterbus.net",
+    "ASISTENTE DE NORMAS ISO":                       "talcantara@masterbus.net",
+    "ASISTENTE DE SEGURIDAD INDUSTRIAL Y AMBIENTE":  "talcantara@masterbus.net",
+    "ASISTENTE OPERATIVO":                           "mdepeon@masterbus.net",
+    "ASISTENTE OPERATIVO DE SEGURIDAD VIAL":         "jcigna@masterbus.net",
+    "BRIGADISTA":                                    "talcantara@masterbus.net",
+    "CADETE":                                        "dscirocco@masterbus.net",
+    "CELADOR":                                       "mdepeon@masterbus.net",
+    "CHAPISTA":                                      "asalvetti@masterbus.net",
+    "CHAPISTA (SALTA/CAT)":                          "asalvetti@masterbus.net",
+    "CONDUCTOR":                                     "mdepeon@masterbus.net",
+    "CONTRATISTAS":                                  "mdepeon@masterbus.net",
+    "COORDINADOR DE BASES":                          "asalvetti@masterbus.net",
+    "COORDINADOR DE IT FLOTA":                       "icarvajal@masterbus.net",
+    "DESPACHANTE DE COMBUSTIBLE":                    "ellanos@masterbus.net",
+    "DIAGRAMADOR DE TRAFICO":                        "mdepeon@masterbus.net",
+    "ELECTRICISTA":                                  "asalvetti@masterbus.net",
+    "ELECTRICISTA (SALTA/CAT)":                      "asalvetti@masterbus.net",
+    "EMPLEADO PANIOL":                               "jcabral@masterbus.net",
+    "ENCARGADO DE CUENTAS A PAGAR":                  "dscirocco@masterbus.net",
+    "ENCARGADO DE FACTURACION":                      "dscirocco@masterbus.net",
+    "ENCARGADO DE TESORERIA":                        "dscirocco@masterbus.net",
+    "ENCARGADO IMPOSITIVO":                          "dscirocco@masterbus.net",
+    "FORMADORES":                                    "jcigna@masterbus.net",
+    "LAVADOR":                                       "ellanos@masterbus.net",
+    "LIDER DE PAÃOL":                                "jcabral@masterbus.net",
+    "LIQUIDADOR DE SUELDOS - GESTION DOC. EMPRESAS": "ffillopski@masterbus.net",
+    "MAESTRANZA":                                    "ellanos@masterbus.net",
+    "MAESTRANZA OLAV":                               "ellanos@masterbus.net",
+    "MECANICO":                                      "asalvetti@masterbus.net",
+    "MECANICO (SALTA/CAT)":                          "asalvetti@masterbus.net",
+    "OPERADOR":                                      "mdepeon@masterbus.net",
+    "PAÃOLERO":                                      "jcabral@masterbus.net",
+    "PROGRAMADOR OPERATIVO":                         "mdepeon@masterbus.net",
+    "PROGRAMADOR/DESARROLLO":                        "mdepeon@masterbus.net",
+    "RECEPCION":                                     "dscirocco@masterbus.net",
+    "SEGURIDAD VIAL Y CAPACITACIONES":               "jcigna@masterbus.net",
+    "SOPORTE ON SITE IT FLOTA":                      "icarvajal@masterbus.net",
+    "SUPERVISOR ADM DE CARROCERIA":                  "asalvetti@masterbus.net",
+    "SUPERVISOR DE CHAPA Y PINTURA":                 "asalvetti@masterbus.net",
+    "SUPERVISOR DE ELECTRICISTAS":                   "asalvetti@masterbus.net",
+    "SUPERVISOR DE OPERACIONES DE TALLER":           "asalvetti@masterbus.net",
+    "SUPERVISOR DE PLANTA":                          "mdepeon@masterbus.net",
+    "SUPERVISOR DE PLAYA":                           "ellanos@masterbus.net",
+    "SUPERVISOR DE SUPERVISORES":                    "mdepeon@masterbus.net",
+    "SUPERVISOR DE TALLER":                          "asalvetti@masterbus.net",
+    "SUPERVISOR GENERAL":                            "asalvetti@masterbus.net",
+    "SUPERVISOR OPERATIVO":                          "mdepeon@masterbus.net",
+    "TALLER OLAV":                                   "asalvetti@masterbus.net",
+}
+
 
 # ─── Funciones auxiliares ────────────────────────────────────
 
 def parse_fecha(fecha_str: str) -> Optional[date]:
-    """Parsea una fecha en formato dd/mm/yyyy. Retorna None si es inválida."""
     if not fecha_str or fecha_str.strip() in FECHAS_INVALIDAS:
         return None
     try:
@@ -56,7 +121,6 @@ def parse_fecha(fecha_str: str) -> Optional[date]:
 
 
 def cargar_notificados() -> dict:
-    """Carga el registro de empleados ya notificados."""
     if NOTIFICADOS_FILE.exists():
         try:
             with open(NOTIFICADOS_FILE, "r", encoding="utf-8") as f:
@@ -67,23 +131,19 @@ def cargar_notificados() -> dict:
 
 
 def guardar_notificados(notificados: dict) -> None:
-    """Guarda el registro de empleados notificados."""
     with open(NOTIFICADOS_FILE, "w", encoding="utf-8") as f:
         json.dump(notificados, f, ensure_ascii=False, indent=2)
     logger.info("Registro de notificados actualizado (%d entradas)", len(notificados))
 
 
 def fechafin_vacia(empleado: dict) -> bool:
-    """Verifica si el empleado no tiene fecha de fin (sigue activo en la empresa)."""
     fechafin = empleado.get("fechafin")
     if fechafin is None:
         return True
-    fechafin = fechafin.strip()
-    return fechafin in ("", "00/00/0000")
+    return fechafin.strip() in ("", "00/00/0000")
 
 
 def fetch_empleados(api_url: str) -> List[Dict]:
-    """Obtiene la lista de empleados desde la API de MasterBus."""
     logger.info("Consultando API: %s", api_url)
     try:
         response = requests.get(api_url, timeout=30)
@@ -102,49 +162,51 @@ def filtrar_empleados_mes5(
     dia_min: int,
     dia_max: int,
 ) -> List[Dict]:
-    """
-    Filtra empleados que:
-    - Están activos (activo == "1")
-    - No tienen fecha de fin (siguen en la empresa)
-    - Su fechainicio cae en el rango de mes 5 (dia_min a dia_max días)
-    - No fueron notificados previamente
-    """
     hoy = date.today()
     resultado = []
 
     for emp in empleados:
-        # Filtro 1: activo
         if emp.get("activo") != "1":
             continue
-
-        # Filtro 2: sin fecha de fin
         if not fechafin_vacia(emp):
             continue
-
-        # Filtro 3: fecha de inicio válida
         fechainicio = parse_fecha(emp.get("fechainicio", ""))
         if fechainicio is None:
             continue
-
-        # Filtro 4: rango de días (mes 5)
         dias = (hoy - fechainicio).days
         if dias < dia_min or dias > dia_max:
             continue
-
-        # Filtro 5: no notificado previamente
         id_emp = emp.get("id_empleado", "")
         if id_emp in notificados:
             logger.debug("Empleado %s ya notificado, se omite", id_emp)
             continue
-
         emp["_dias_en_empresa"] = dias
         resultado.append(emp)
 
     return resultado
 
 
+def agrupar_por_gerente(empleados: List[Dict]) -> Dict[str, List[Dict]]:
+    """Agrupa empleados según el gerente responsable de su cargo."""
+    grupos: Dict[str, List[Dict]] = defaultdict(list)
+    sin_gerente = []
+
+    for emp in empleados:
+        cargo = emp.get("cargo", "").strip().upper()
+        gerente = CARGO_GERENTE.get(cargo)
+        if gerente:
+            grupos[gerente].append(emp)
+        else:
+            logger.warning("Cargo sin gerente asignado: '%s' (empleado %s)", cargo, emp.get("id_empleado"))
+            sin_gerente.append(emp)
+
+    if sin_gerente:
+        logger.warning("%d empleado(s) sin gerente asignado, no serán notificados.", len(sin_gerente))
+
+    return dict(grupos)
+
+
 def construir_email_html(empleados: List[Dict]) -> str:
-    """Construye el cuerpo HTML del email con la tabla de empleados."""
     filas = ""
     for emp in empleados:
         filas += f"""
@@ -158,11 +220,11 @@ def construir_email_html(empleados: List[Dict]) -> str:
             <td style="padding: 8px; border: 1px solid #ddd; text-align: center;">{emp.get('_dias_en_empresa', '-')}</td>
         </tr>"""
 
-    html = f"""
+    return f"""
     <html>
     <body style="font-family: Arial, sans-serif; color: #333;">
         <h2 style="color: #d35400;">⚠️ Alerta de Período de Prueba</h2>
-        <p>Los siguientes <strong>{len(empleados)}</strong> empleado(s) están cumpliendo su
+        <p>Los siguientes <strong>{len(empleados)}</strong> empleado(s) a tu cargo están cumpliendo su
         <strong>5° mes</strong> de período de prueba y deben ser evaluados antes de que
         finalice el período de 6 meses:</p>
 
@@ -184,13 +246,12 @@ def construir_email_html(empleados: List[Dict]) -> str:
         </table>
 
         <p style="margin-top: 20px; font-size: 12px; color: #888;">
-            Este es un mensaje automático generado por el sistema de alertas de RRHH.
-            <br>Fecha de ejecución: {datetime.now().strftime('%d/%m/%Y %H:%M')}
+            Este es un mensaje automático generado por el sistema de alertas de RRHH.<br>
+            Fecha de ejecución: {datetime.now().strftime('%d/%m/%Y %H:%M')}
         </p>
     </body>
     </html>
     """
-    return html
 
 
 def enviar_email(
@@ -200,15 +261,16 @@ def enviar_email(
     smtp_password: str,
     smtp_use_tls: bool,
     destinatario: str,
-    asunto: str,
-    cuerpo_html: str,
+    empleados: List[Dict],
 ) -> None:
-    """Envía un email HTML vía SMTP."""
+    asunto = f"⚠️ Alerta Período de Prueba — {len(empleados)} empleado(s) a tu cargo en mes 5"
+    cuerpo = construir_email_html(empleados)
+
     msg = MIMEMultipart("alternative")
-    msg["From"] = smtp_user
-    msg["To"] = destinatario
+    msg["From"]    = smtp_user
+    msg["To"]      = destinatario
     msg["Subject"] = asunto
-    msg.attach(MIMEText(cuerpo_html, "html", "utf-8"))
+    msg.attach(MIMEText(cuerpo, "html", "utf-8"))
 
     try:
         if smtp_use_tls:
@@ -218,19 +280,17 @@ def enviar_email(
             server = smtplib.SMTP_SSL(smtp_host, smtp_port)
 
         server.login(smtp_user, smtp_password)
-        server.sendmail(smtp_user, destinatario, msg.as_string())
+        server.sendmail(smtp_user, [destinatario], msg.as_string())
         server.quit()
-        logger.info("Email enviado correctamente a %s", destinatario)
+        logger.info("Email enviado a %s (%d empleados)", destinatario, len(empleados))
     except smtplib.SMTPException as e:
-        logger.error("Error al enviar email: %s", e)
+        logger.error("Error al enviar email a %s: %s", destinatario, e)
         raise
 
 
 def imprimir_tabla_consola(empleados: List[Dict]) -> None:
-    """Imprime una tabla formateada en consola para modo dry-run."""
     if not empleados:
         return
-
     print("\n" + "=" * 100)
     print(f"{'Legajo':<10} {'Nombre':<35} {'Cargo':<18} {'Empleador':<25} {'Ingreso':<12} {'Días':<5}")
     print("-" * 100)
@@ -252,44 +312,22 @@ def main():
     parser = argparse.ArgumentParser(
         description="Alerta de Período de Prueba — Detecta empleados en mes 5"
     )
-    parser.add_argument(
-        "--dry-run",
-        action="store_true",
-        help="Solo muestra los empleados detectados, no envía email",
-    )
+    parser.add_argument("--dry-run", action="store_true",
+                        help="Solo muestra los empleados detectados, no envía email")
     args = parser.parse_args()
 
     logger.info("=" * 60)
     logger.info("Inicio de ejecución — Alerta Período de Prueba")
     logger.info("Modo: %s", "DRY-RUN (sin envío de email)" if args.dry_run else "PRODUCCIÓN")
 
-    # En modo dry-run no necesitamos las variables SMTP
-    if args.dry_run:
-        from dotenv import load_dotenv
-        _env_path = Path(__file__).resolve().parent.parent.parent / ".env"
-        load_dotenv(dotenv_path=_env_path)
-        import os
-        api_url = os.getenv(
-            "MASTERBUS_API_URL",
-            "https://traficonuevo.masterbus.net/api/v1/auto/e",
-        )
-        dia_min = int(os.getenv("ALERTA_DIA_MIN", "150"))
-        dia_max = int(os.getenv("ALERTA_DIA_MAX", "180"))
-    else:
-        # Importar config completa (requiere SMTP configurado)
-        from config import (
-            MASTERBUS_API_URL as api_url,
-            SMTP_HOST,
-            SMTP_PORT,
-            SMTP_USER,
-            SMTP_PASSWORD,
-            SMTP_USE_TLS,
-            RRHH_EMAIL,
-            ALERTA_DIA_MIN as dia_min,
-            ALERTA_DIA_MAX as dia_max,
-        )
+    from config import (
+        MASTERBUS_API_URL as api_url,
+        SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASSWORD, SMTP_USE_TLS,
+        ALERTA_DIA_MIN as dia_min,
+        ALERTA_DIA_MAX as dia_max,
+    )
 
-    # 1. Obtener empleados de la API
+    # 1. Obtener empleados
     empleados = fetch_empleados(api_url)
 
     # 2. Cargar notificados previos
@@ -307,40 +345,45 @@ def main():
     # 4. Mostrar en consola
     imprimir_tabla_consola(alertas)
 
+    # 5. Agrupar por gerente responsable
+    grupos = agrupar_por_gerente(alertas)
+    logger.info("Gerentes a notificar: %d", len(grupos))
+
     if args.dry_run:
-        logger.info("Modo DRY-RUN: no se envía email ni se actualiza el registro.")
+        for gerente, emps in sorted(grupos.items()):
+            logger.info("  [DRY-RUN] -> %s | %d empleado(s)", gerente, len(emps))
+        logger.info("Modo DRY-RUN: no se envían emails ni se actualiza el registro.")
         return
 
-    # 5. Construir y enviar email
-    asunto = f"⚠️ Alerta Período de Prueba — {len(alertas)} empleado(s) en mes 5"
-    cuerpo = construir_email_html(alertas)
+    # 6. Enviar un email por gerente
+    enviados_ok = []
+    for gerente, emps in grupos.items():
+        try:
+            enviar_email(
+                smtp_host=SMTP_HOST,
+                smtp_port=SMTP_PORT,
+                smtp_user=SMTP_USER,
+                smtp_password=SMTP_PASSWORD,
+                smtp_use_tls=SMTP_USE_TLS,
+                destinatario=gerente,
+                empleados=emps,
+            )
+            enviados_ok.extend(emps)
+        except Exception:
+            logger.error("Fallo el envío a %s. Sus empleados no se marcarán como notificados.", gerente)
 
-    try:
-        enviar_email(
-            smtp_host=SMTP_HOST,
-            smtp_port=SMTP_PORT,
-            smtp_user=SMTP_USER,
-            smtp_password=SMTP_PASSWORD,
-            smtp_use_tls=SMTP_USE_TLS,
-            destinatario=RRHH_EMAIL,
-            asunto=asunto,
-            cuerpo_html=cuerpo,
-        )
-    except Exception:
-        logger.error("Fallo el envío del email. No se actualizan los notificados.")
-        sys.exit(1)
+    # 7. Registrar notificados solo de los emails exitosos
+    if enviados_ok:
+        fecha_hoy = datetime.now().strftime("%d/%m/%Y %H:%M")
+        for emp in enviados_ok:
+            notificados[emp["id_empleado"]] = {
+                "apenom": emp.get("apenom", ""),
+                "fechainicio": emp.get("fechainicio", ""),
+                "fecha_notificacion": fecha_hoy,
+            }
+        guardar_notificados(notificados)
 
-    # 6. Registrar como notificados (solo si el email se envió OK)
-    fecha_hoy = datetime.now().strftime("%d/%m/%Y %H:%M")
-    for emp in alertas:
-        notificados[emp["id_empleado"]] = {
-            "apenom": emp.get("apenom", ""),
-            "fechainicio": emp.get("fechainicio", ""),
-            "fecha_notificacion": fecha_hoy,
-        }
-
-    guardar_notificados(notificados)
-    logger.info("Ejecución completada exitosamente.")
+    logger.info("Ejecución completada. Emails enviados: %d/%d gerentes.", len(enviados_ok and grupos), len(grupos))
 
 
 if __name__ == "__main__":

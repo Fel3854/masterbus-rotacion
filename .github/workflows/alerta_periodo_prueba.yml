@@ -1,0 +1,34 @@
+name: Alerta Período de Prueba
+
+on:
+  schedule:
+    - cron: "0 11 * * *"   # 08:00 Argentina (UTC-3) todos los días
+  workflow_dispatch:         # permite dispararlo manualmente desde GitHub
+
+jobs:
+  alerta:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repositorio
+        uses: actions/checkout@v4
+
+      - name: Configurar Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Instalar dependencias
+        run: pip install -r datos/alerta_periodo_prueba/requirements.txt
+
+      - name: Ejecutar alerta
+        env:
+          SMTP_HOST: ${{ secrets.SMTP_HOST }}
+          SMTP_PORT: ${{ secrets.SMTP_PORT }}
+          SMTP_USER: ${{ secrets.SMTP_USER }}
+          SMTP_PASSWORD: ${{ secrets.SMTP_PASSWORD }}
+          SMTP_USE_TLS: ${{ secrets.SMTP_USE_TLS }}
+          MASTERBUS_API_URL: ${{ secrets.MASTERBUS_API_URL }}
+          ALERTA_DIA_MIN: "150"
+          ALERTA_DIA_MAX: "180"
+        run: python3 datos/alerta_periodo_prueba/main.py
