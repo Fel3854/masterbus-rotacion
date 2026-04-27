@@ -818,61 +818,6 @@ with tab_volumen:
 
 
 
-# ─── Desgloses ───────────────────────────────────────────────
-st.divider()
-st.markdown(f"""
-<div style="display:flex;align-items:center;gap:8px;margin:12px 0 8px;">
-  <div style="width:3px;height:18px;background:{COLOR_PRIMARY};border-radius:2px;"></div>
-  <span style="font-weight:700;font-size:1rem;color:{COLOR_TEXT};">Desglose de Bajas — {label_periodo}</span>
-</div>
-""", unsafe_allow_html=True)
-
-col_izq, col_der = st.columns(2)
-
-with col_izq:
-    st.markdown(f'<p style="font-weight:600;font-size:13px;color:{COLOR_TEXT};margin-bottom:4px;">Por Cargo</p>', unsafe_allow_html=True)
-    if not df_bajas.empty:
-        bc = df_bajas["cargo"].value_counts().reset_index()
-        bc.columns = ["cargo", "bajas"]
-        fig = px.bar(
-            bc, x="bajas", y="cargo", orientation="h",
-            color_discrete_sequence=[COLOR_PRIMARY],
-            labels={"bajas": "Bajas", "cargo": ""},
-        )
-        fig.update_layout(
-            **_chart_base(
-                yaxis=dict(autorange="reversed", showgrid=False, color=COLOR_MUTED, showline=False),
-                xaxis=dict(showgrid=True, gridcolor="#E8E8E8", color=COLOR_MUTED, showline=False),
-                height=max(260, len(bc) * 34),
-                margin=dict(l=0, r=10, t=10, b=10),
-            )
-        )
-        st.plotly_chart(fig, use_container_width=True)
-    else:
-        st.info("Sin bajas en este período.")
-
-with col_der:
-    st.markdown(f'<p style="font-weight:600;font-size:13px;color:{COLOR_TEXT};margin-bottom:4px;">Por Sector</p>', unsafe_allow_html=True)
-    if not df_bajas.empty:
-        bs = df_bajas["str"].value_counts().reset_index()
-        bs.columns = ["sector", "bajas"]
-        fig = px.bar(
-            bs, x="bajas", y="sector", orientation="h",
-            color_discrete_sequence=[COLOR_SECONDARY],
-            labels={"bajas": "Bajas", "sector": ""},
-        )
-        fig.update_layout(
-            **_chart_base(
-                yaxis=dict(autorange="reversed", showgrid=False, color=COLOR_MUTED, showline=False),
-                xaxis=dict(showgrid=True, gridcolor="#E8E8E8", color=COLOR_MUTED, showline=False),
-                height=max(260, len(bs) * 34),
-                margin=dict(l=0, r=10, t=10, b=10),
-            )
-        )
-        st.plotly_chart(fig, use_container_width=True)
-    else:
-        st.info("Sin bajas en este período.")
-
 # ─── Evolución por empresa ───────────────────────────────────
 st.divider()
 st.markdown(f"""
@@ -937,47 +882,3 @@ if series_emp:
 else:
     st.info("No hay suficientes datos por empresa para mostrar este gráfico con los filtros actuales.")
 
-# ─── Tabla de detalle ────────────────────────────────────────
-st.divider()
-st.markdown(f"""
-<div style="display:flex;align-items:center;gap:8px;margin:12px 0 8px;">
-  <div style="width:3px;height:18px;background:{COLOR_SECONDARY};border-radius:2px;"></div>
-  <span style="font-weight:700;font-size:1rem;color:{COLOR_TEXT};">Detalle de Bajas — {label_periodo}</span>
-</div>
-""", unsafe_allow_html=True)
-
-COLS = {
-    "legajo": "Legajo",
-    "apenom": "Nombre",
-    "cargo": "Cargo",
-    "empleador": "Empleador",
-    "str": "Sector",
-    "fechainicio": "Ingreso",
-    "fechafin": "Baja",
-}
-
-if not df_bajas.empty:
-    tabla = (
-        df_bajas[list(COLS.keys())]
-        .rename(columns=COLS)
-        .sort_values("Baja", ascending=False)
-        .reset_index(drop=True)
-    )
-    # Fuente más grande para mejor lectura
-    st.markdown("""
-    <style>
-    [data-testid="stDataFrame"] table { font-size: 15px !important; }
-    [data-testid="stDataFrame"] th { font-size: 14px !important; font-weight: 700 !important; }
-    [data-testid="stDataFrame"] td { font-size: 15px !important; }
-    [data-testid="stDataFrameContainer"] { font-size: 15px !important; }
-    </style>
-    """, unsafe_allow_html=True)
-    st.dataframe(tabla, use_container_width=True, hide_index=True, height=500)
-    st.download_button(
-        f"Descargar CSV — {label_periodo}",
-        data=tabla.to_csv(index=False).encode("utf-8"),
-        file_name=f"bajas_{label_periodo.replace(' ', '_')}.csv",
-        mime="text/csv",
-    )
-else:
-    st.info("No hubo bajas en este período para los filtros seleccionados.")
