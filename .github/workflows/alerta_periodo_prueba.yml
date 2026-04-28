@@ -13,6 +13,14 @@ jobs:
       - name: Checkout repositorio
         uses: actions/checkout@v4
 
+      - name: Restaurar registro de notificados
+        uses: actions/cache@v4
+        with:
+          path: datos/alerta_periodo_prueba/notificados.json
+          key: notificados-${{ github.run_id }}
+          restore-keys: |
+            notificados-
+
       - name: Configurar Python
         uses: actions/setup-python@v5
         with:
