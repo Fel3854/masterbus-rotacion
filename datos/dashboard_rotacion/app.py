@@ -150,9 +150,12 @@ def calcular_rotacion(df, inicio, fin):
     n_p = len(plantilla)
     n_b = len(bajas)
     n_a = len(altas)
-    tasa = round(n_b / n_p * 100, 2) if n_p > 0 else 0.0
+    plantilla_final = n_p + n_a - n_b
+    promedio = (n_p + plantilla_final) / 2
+    tasa = round(n_b / promedio * 100, 2) if promedio > 0 else 0.0
+    tasa_incorporacion = round(n_a / promedio * 100, 2) if promedio > 0 else 0.0
 
-    return n_p, n_b, n_a, tasa, bajas
+    return n_p, n_b, n_a, tasa, tasa_incorporacion, bajas
 
 
 def periodo_anterior(vista, año, mes):
@@ -195,7 +198,7 @@ def calcular_serie(df, vista):
         cursor = date(AÑO_INICIO, 1, 1)
         while cursor <= hoy:
             fin = (cursor + relativedelta(months=1)) - timedelta(days=1)
-            n_p, n_b, n_a, tasa, _ = calcular_rotacion(df, cursor, min(fin, hoy))
+            n_p, n_b, n_a, tasa, tasa_inc, _ = calcular_rotacion(df, cursor, min(fin, hoy))
             filas.append({
                 "periodo": cursor.strftime("%m/%Y"),
                 "periodo_dt": cursor,
@@ -203,13 +206,14 @@ def calcular_serie(df, vista):
                 "bajas": n_b,
                 "altas": n_a,
                 "tasa": tasa,
+                "tasa_incorporacion": tasa_inc,
             })
             cursor += relativedelta(months=1)
     else:
         for año in range(AÑO_INICIO, hoy.year + 1):
             inicio = date(año, 1, 1)
             fin = date(año, 12, 31)
-            n_p, n_b, n_a, tasa, _ = calcular_rotacion(df, inicio, min(fin, hoy))
+            n_p, n_b, n_a, tasa, tasa_inc, _ = calcular_rotacion(df, inicio, min(fin, hoy))
             filas.append({
                 "periodo": str(año),
                 "periodo_dt": inicio,
@@ -217,6 +221,7 @@ def calcular_serie(df, vista):
                 "bajas": n_b,
                 "altas": n_a,
                 "tasa": tasa,
+                "tasa_incorporacion": tasa_inc,
             })
 
     return pd.DataFrame(filas)
@@ -234,7 +239,7 @@ def calcular_heatmap_data(df):
             else:
                 inicio = date(año, mes, 1)
                 fin = (inicio + relativedelta(months=1)) - timedelta(days=1)
-                _, _, _, tasa, _ = calcular_rotacion(df, inicio, min(fin, hoy))
+                _, _, _, tasa, _, _ = calcular_rotacion(df, inicio, min(fin, hoy))
                 fila[str(año)] = tasa
         filas.append(fila)
     return pd.DataFrame(filas).set_index("mes")
@@ -564,15 +569,16 @@ else:
 fin_periodo = min(fin_periodo, hoy)
 
 # ─── KPIs ────────────────────────────────────────────────────
-n_plantilla, n_bajas, n_altas, tasa, df_bajas = calcular_rotacion(df, inicio_periodo, fin_periodo)
+n_plantilla, n_bajas, n_altas, tasa, tasa_incorporacion, df_bajas = calcular_rotacion(df, inicio_periodo, fin_periodo)
 
 inicio_ant, fin_ant = periodo_anterior(vista, año_sel, mes_sel if mes_sel else 1)
-n_p_ant, n_b_ant, n_a_ant, tasa_ant, _ = calcular_rotacion(df, inicio_ant, min(fin_ant, hoy))
+n_p_ant, n_b_ant, n_a_ant, tasa_ant, tasa_inc_ant, _ = calcular_rotacion(df, inicio_ant, min(fin_ant, hoy))
 
 delta_plantilla = n_plantilla - n_p_ant if n_p_ant else None
 delta_bajas = n_bajas - n_b_ant
 delta_altas = n_altas - n_a_ant
 delta_tasa = round(tasa - tasa_ant, 2) if tasa_ant else None
+delta_tasa_inc = round(tasa_incorporacion - tasa_inc_ant, 2) if tasa_inc_ant else None
 
 antiguedad = antigüedad_media_bajas(df_bajas)
 
@@ -631,7 +637,7 @@ st.markdown(f"""
     </h1>
     <p style="margin:0;color:{COLOR_MUTED};font-size:0.88rem;">
       Datos actualizados cada hora desde la API de MasterBus
-      &nbsp;·&nbsp; Fórmula: Bajas / Plantilla al inicio del período
+      &nbsp;·&nbsp; Fórmula: Bajas (o Altas) / Promedio de dotación × 100
     </p>
   </div>
   <div style="background:{COLOR_BG};border:1px solid {COLOR_BORDER};border-radius:12px;
@@ -645,7 +651,7 @@ st.markdown(f"""
   </div>
 </div>
 
-<div style="display:grid;grid-template-columns:repeat(5,1fr);gap:14px;margin-bottom:8px;">
+<div style="display:grid;grid-template-columns:repeat(6,1fr);gap:14px;margin-bottom:8px;">
 
   <div style="background:{COLOR_SURFACE};border:1px solid {COLOR_BORDER};
               border-top:3px solid {COLOR_PRIMARY};border-radius:10px;
@@ -687,6 +693,20 @@ st.markdown(f"""
       {n_altas:,}
     </div>
     {_delta_html(delta_altas)}
+  </div>
+
+  <div style="background:{COLOR_SURFACE};border:1px solid {COLOR_BORDER};
+              border-top:3px solid {COLOR_SECONDARY};border-radius:10px;
+              padding:22px 18px 18px;box-shadow:0 1px 5px rgba(0,0,0,0.04);">
+    <div style="font-size:0.75rem;font-weight:700;color:{COLOR_MUTED};
+                text-transform:uppercase;letter-spacing:0.09em;margin-bottom:10px;">
+      Tasa de Incorporación
+    </div>
+    <div style="font-size:2.6rem;font-weight:800;color:{COLOR_TEXT};
+                line-height:1;letter-spacing:-0.025em;font-family:'Fira Code', monospace;">
+      {tasa_incorporacion:.1f}%
+    </div>
+    {_delta_html(delta_tasa_inc, suffix="pp", decimals=1)}
   </div>
 
   <div style="background:{COLOR_SURFACE};border:1px solid {COLOR_BORDER};
