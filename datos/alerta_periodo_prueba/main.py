@@ -245,7 +245,12 @@ def construir_email_html(empleados: List[Dict]) -> str:
             </tbody>
         </table>
 
-        <p style="margin-top: 20px; font-size: 12px; color: #888;">
+        <p style="margin-top: 20px; color: #333;">
+            Por favor, <strong>contactate con Recursos Humanos</strong> para comunicarle
+            la decisión respecto a cada empleado antes de que venza el período de prueba.
+        </p>
+
+        <p style="margin-top: 16px; font-size: 12px; color: #888;">
             Este es un mensaje automático generado por el sistema de alertas de RRHH.<br>
             Fecha de ejecución: {datetime.now().strftime('%d/%m/%Y %H:%M')}
         </p>
