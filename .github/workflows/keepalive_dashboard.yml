@@ -1,0 +1,21 @@
+name: Keepalive Dashboard
+
+on:
+  schedule:
+    - cron: "0 */12 * * *"   # cada 12 horas
+  workflow_dispatch:
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ping Streamlit app
+        run: |
+          STATUS=$(curl -s -o /dev/null -w "%{http_code}" --max-time 30 \
+            "https://masterbus-rotacion-42fy66dm5ug3nu59ukvwfh.streamlit.app")
+          echo "HTTP status: $STATUS"
+          if [ "$STATUS" -lt 200 ] || [ "$STATUS" -ge 500 ]; then
+            echo "App no respondió correctamente (status $STATUS)"
+            exit 1
+          fi
+          echo "App activa."
