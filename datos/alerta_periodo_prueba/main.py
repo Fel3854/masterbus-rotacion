@@ -383,7 +383,12 @@ def main():
             }
         guardar_notificados(notificados)
 
-    logger.info("Ejecución completada. Emails enviados: %d/%d gerentes.", len(enviados_ok and grupos), len(grupos))
+    emails_ok = len(grupos) > 0 and len(enviados_ok) > 0
+    logger.info("Ejecución completada. Emails enviados: %d/%d gerentes.", len(grupos) if emails_ok else 0, len(grupos))
+
+    if grupos and not emails_ok:
+        logger.error("No se pudo enviar ningún email. Revisá las credenciales SMTP.")
+        sys.exit(1)
 
 
 if __name__ == "__main__":
