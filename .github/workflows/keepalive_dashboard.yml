@@ -2,20 +2,38 @@ name: Keepalive Dashboard
 
 on:
   schedule:
-    - cron: "0 */12 * * *"   # cada 12 horas
+    - cron: "0 */2 * * *"   # cada 2 horas
   workflow_dispatch:
 
 jobs:
   ping:
     runs-on: ubuntu-latest
     steps:
-      - name: Ping Streamlit app
+      - name: Instalar Playwright
+        run: pip install playwright && playwright install chromium --with-deps
+
+      - name: Despertar app Streamlit
         run: |
-          STATUS=$(curl -s -o /dev/null -w "%{http_code}" --max-time 30 \
-            "https://masterbus-rotacion-42fy66dm5ug3nu59ukvwfh.streamlit.app")
-          echo "HTTP status: $STATUS"
-          if [ "$STATUS" -lt 200 ] || [ "$STATUS" -ge 500 ]; then
-            echo "App no respondió correctamente (status $STATUS)"
-            exit 1
-          fi
-          echo "App activa."
+          python3 - <<'EOF'
+          from playwright.sync_api import sync_playwright
+
+          URL = "https://masterbus-rotacion-42fy66dm5ug3nu59ukvwfh.streamlit.app"
+
+          with sync_playwright() as p:
+              browser = p.chromium.launch()
+              page = browser.new_page()
+              print(f"Abriendo {URL}...")
+              page.goto(URL, timeout=60000)
+
+              # Si la app está dormida, clickear el botón de despertar
+              try:
+                  page.click("text=Yes, get this app back up!", timeout=8000)
+                  print("App estaba dormida — botón de despertar clickeado.")
+                  page.wait_for_timeout(15000)
+              except Exception:
+                  print("App ya estaba activa.")
+
+              page.wait_for_timeout(5000)
+              print("Keepalive completado.")
+              browser.close()
+          EOF
