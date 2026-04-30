@@ -68,7 +68,6 @@ CARGO_GERENTE = {
     "CHAPISTA":                                      "asalvetti@masterbus.net",
     "CHAPISTA (SALTA/CAT)":                          "asalvetti@masterbus.net",
     "CONDUCTOR":                                     "mdepeon@masterbus.net",
-    "CONTRATISTAS":                                  "mdepeon@masterbus.net",
     "COORDINADOR DE BASES":                          "asalvetti@masterbus.net",
     "COORDINADOR DE IT FLOTA":                       "icarvajal@masterbus.net",
     "DESPACHANTE DE COMBUSTIBLE":                    "ellanos@masterbus.net",
