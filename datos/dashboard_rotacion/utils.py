@@ -92,6 +92,24 @@ def inyectar_css_base():
         color: {COLOR_TEXT};
     }}
 
+    /* Forzar texto oscuro en todos los elementos de texto de Streamlit */
+    p, span, li, td, th, label, div, h1, h2, h3, h4, h5, h6 {{
+        color: {COLOR_TEXT};
+    }}
+    [data-testid="stMarkdownContainer"] p,
+    [data-testid="stMarkdownContainer"] span,
+    [data-testid="stText"],
+    [data-testid="stCaptionContainer"] p,
+    [data-testid="stWidgetLabel"] p {{
+        color: {COLOR_TEXT} !important;
+    }}
+    /* Dataframe */
+    [data-testid="stDataFrame"] td,
+    [data-testid="stDataFrame"] th,
+    [data-testid="stDataFrame"] span {{
+        color: {COLOR_TEXT} !important;
+    }}
+
     .stApp {{ background-color: {COLOR_BG}; }}
 
     .stButton > button {{

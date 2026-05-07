@@ -18,6 +18,15 @@ html, body, [class*="css"] {{
     font-family: 'Fira Sans', sans-serif;
     color: #333333;
 }}
+p, span, li, td, th, label, div, h1, h2, h3, h4, h5, h6 {{ color: #333333; }}
+[data-testid="stMarkdownContainer"] p,
+[data-testid="stMarkdownContainer"] span,
+[data-testid="stText"],
+[data-testid="stCaptionContainer"] p,
+[data-testid="stWidgetLabel"] p {{ color: #333333 !important; }}
+[data-testid="stDataFrame"] td,
+[data-testid="stDataFrame"] th,
+[data-testid="stDataFrame"] span {{ color: #333333 !important; }}
 .stApp {{ background-color: #EDEDED; }}
 
 /* ── Ocultar toolbar del dataframe ── */
