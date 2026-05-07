@@ -30,6 +30,7 @@ p, span, li, td, th, label, div, h1, h2, h3, h4, h5, h6 {{ color: #333333; }}
 .stApp {{ background-color: #EDEDED; }}
 
 [data-testid="stElementToolbar"] {{ display: none; }}
+[data-testid="InputInstructions"] {{ display: none !important; }}
 
 .page-title {{
     display: flex; align-items: center; gap: 12px;

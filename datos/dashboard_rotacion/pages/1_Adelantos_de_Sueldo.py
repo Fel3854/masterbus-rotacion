@@ -29,8 +29,9 @@ p, span, li, td, th, label, div, h1, h2, h3, h4, h5, h6 {{ color: #333333; }}
 [data-testid="stDataFrame"] span {{ color: #333333 !important; }}
 .stApp {{ background-color: #EDEDED; }}
 
-/* ── Ocultar toolbar del dataframe ── */
+/* ── Ocultar toolbar del dataframe y hint "Press Enter" ── */
 [data-testid="stElementToolbar"] {{ display: none; }}
+[data-testid="InputInstructions"] {{ display: none !important; }}
 
 /* ── Header de página ── */
 .page-title {{
