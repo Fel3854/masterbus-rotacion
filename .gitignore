@@ -1,5 +1,9 @@
 # Credenciales
 .env
+**/.streamlit/secrets.toml
+
+# Datos locales
+datos/dashboard_rotacion/data/
 
 # Estado interno de automatizaciones
 datos/alerta_periodo_prueba/notificados.json
