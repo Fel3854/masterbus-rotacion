@@ -184,6 +184,22 @@ hr {{ border-color: #e0e0e0 !important; margin: 1.75rem 0 !important; }}
     font-size: 0.8rem; font-weight: 600; color: #444;
 }}
 .download-meta .pill span {{ color: {COLOR_PRIMARY}; }}
+
+div[data-testid="stExpander"] summary p {{
+    font-size: 0.82rem !important;
+    font-weight: 600 !important;
+    color: #888 !important;
+}}
+.delete-btn-wrap button {{
+    background: #fff !important;
+    color: #D12F19 !important;
+    border: 1.5px solid #D12F19 !important;
+    border-radius: 8px !important;
+}}
+.delete-btn-wrap button:hover {{
+    background: #D12F19 !important;
+    color: #fff !important;
+}}
 </style>
 """, unsafe_allow_html=True)
 
@@ -219,17 +235,21 @@ def _guardar(legajo, apenom, empleador, tipo, fecha, monto, motivo):
 def _leer(desde: date, hasta: date) -> pd.DataFrame:
     resp = (
         get_supabase().table(TABLA)
-        .select("legajo,apenom,empleador,tipo_descuento,fecha_descuento,monto,motivo")
+        .select("id,legajo,apenom,empleador,tipo_descuento,fecha_descuento,monto,motivo")
         .gte("fecha_descuento", str(desde))
         .lte("fecha_descuento", str(hasta))
         .order("fecha_descuento", desc=True)
         .execute()
     )
     if not resp.data:
-        return pd.DataFrame(columns=["legajo","apenom","empleador","tipo_descuento","fecha_descuento","monto","motivo"])
+        return pd.DataFrame(columns=["id","legajo","apenom","empleador","tipo_descuento","fecha_descuento","monto","motivo"])
     df = pd.DataFrame(resp.data)
     df["fecha_descuento"] = pd.to_datetime(df["fecha_descuento"]).dt.date
     return df
+
+
+def _eliminar(record_id: str):
+    get_supabase().table(TABLA).delete().eq("id", record_id).execute()
 
 
 def _stats_mes() -> dict:
@@ -450,3 +470,38 @@ else:
         file_name=f"descuentos_{desde.strftime('%Y%m%d')}_{hasta.strftime('%Y%m%d')}.txt",
         mime="text/plain",
     )
+
+# ─── Sección eliminar ─────────────────────────────────────────
+st.divider()
+with st.expander("Eliminar un registro"):
+    if df_reg.empty:
+        st.info("No hay registros en el período seleccionado para eliminar.")
+    else:
+        opciones = {
+            f"{row['fecha_descuento'].strftime('%d/%m/%Y')}  —  {row['apenom']}  —  {row['tipo_descuento']}  —  $ {int(row['monto']):,}".replace(",", "."): row["id"]
+            for _, row in df_reg.iterrows()
+        }
+        sel_label = st.selectbox("Seleccionar registro", list(opciones.keys()), key="sel_borrar_d")
+        sel_id = opciones[sel_label]
+
+        st.markdown('<div class="delete-btn-wrap">', unsafe_allow_html=True)
+        if st.button("Eliminar registro", key="btn_del_d"):
+            st.session_state["del_id_d"] = sel_id
+            st.session_state["del_label_d"] = sel_label
+        st.markdown("</div>", unsafe_allow_html=True)
+
+        if st.session_state.get("del_id_d") == sel_id:
+            st.warning(f"¿Eliminar **{sel_label}**? Esta acción no se puede deshacer.")
+            c1, c2 = st.columns([1, 1])
+            with c1:
+                if st.button("Sí, eliminar", key="btn_confirm_d"):
+                    _eliminar(st.session_state["del_id_d"])
+                    st.session_state.pop("del_id_d", None)
+                    st.session_state.pop("del_label_d", None)
+                    st.success("Registro eliminado.")
+                    st.rerun()
+            with c2:
+                if st.button("Cancelar", key="btn_cancel_d"):
+                    st.session_state.pop("del_id_d", None)
+                    st.session_state.pop("del_label_d", None)
+                    st.rerun()
