@@ -108,17 +108,21 @@ div[data-testid="stRadio"] label:has(input:checked) {{
 
 /* ── Botón ── */
 .stButton > button {{
-    background: #2a2a2a;
-    color: #fff !important;
-    border: none;
+    background: #fff;
+    color: #333 !important;
+    border: 1.5px solid #d0d0d0;
     border-radius: 8px;
     font-family: 'Fira Sans', sans-serif;
     font-weight: 600;
     font-size: 0.88rem;
     padding: 0.5rem 1.2rem;
-    transition: background 0.2s;
+    transition: all 0.2s;
 }}
-.stButton > button:hover {{ background: {COLOR_PRIMARY} !important; }}
+.stButton > button:hover {{
+    background: {COLOR_PRIMARY} !important;
+    color: #fff !important;
+    border-color: {COLOR_PRIMARY} !important;
+}}
 
 /* ── Caption ── */
 [data-testid="stCaptionContainer"] p {{ color: #aaa !important; font-size: 0.78rem !important; }}
