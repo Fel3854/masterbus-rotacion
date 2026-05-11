@@ -146,7 +146,7 @@ div[data-testid="stForm"] .stButton > button:active {{
 }}
 
 .stDownloadButton > button {{
-    background: #1a1a1a !important;
+    background: {COLOR_PRIMARY} !important;
     color: #fff !important;
     border: none !important;
     border-radius: 8px !important;
@@ -156,10 +156,12 @@ div[data-testid="stForm"] .stButton > button:active {{
     padding: 0.55rem 1.4rem !important;
     cursor: pointer !important;
     transition: background 0.2s ease, transform 0.1s ease !important;
+    box-shadow: 0 2px 8px rgba(237,93,59,0.3) !important;
 }}
 .stDownloadButton > button:hover {{
-    background: #333 !important;
+    background: #d44e2f !important;
     transform: translateY(-1px) !important;
+    box-shadow: 0 4px 14px rgba(237,93,59,0.4) !important;
 }}
 
 div[data-testid="stAlert"] {{

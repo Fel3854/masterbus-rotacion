@@ -156,7 +156,7 @@ div[data-testid="stForm"] .stButton > button:active {{
 
 /* ── Botón descarga ── */
 .stDownloadButton > button {{
-    background: #1a1a1a !important;
+    background: {COLOR_PRIMARY} !important;
     color: #fff !important;
     border: none !important;
     border-radius: 8px !important;
@@ -166,10 +166,12 @@ div[data-testid="stForm"] .stButton > button:active {{
     padding: 0.55rem 1.4rem !important;
     cursor: pointer !important;
     transition: background 0.2s ease, transform 0.1s ease !important;
+    box-shadow: 0 2px 8px rgba(237,93,59,0.3) !important;
 }}
 .stDownloadButton > button:hover {{
-    background: #333 !important;
+    background: #d44e2f !important;
     transform: translateY(-1px) !important;
+    box-shadow: 0 4px 14px rgba(237,93,59,0.4) !important;
 }}
 
 /* ── Mensajes de éxito/error ── */
@@ -244,7 +246,7 @@ def _leer(desde: date, hasta: date) -> pd.DataFrame:
     if not resp.data:
         return pd.DataFrame(columns=["id","legajo","apenom","empleador","fecha_adelanto","monto","motivo"])
     df = pd.DataFrame(resp.data)
-    df["fecha_adelanto"] = pd.to_datetime(df["fecha_adelanto"]).dt.date
+    df["fecha_adelanto"] = df["fecha_adelanto"].apply(lambda x: pd.to_datetime(x).date())
     return df
 
 
@@ -262,7 +264,7 @@ def _stats_mes() -> dict:
         .order("fecha_adelanto", desc=True)
         .execute()
     )
-    data = resp.data or []
+    data: list[dict] = resp.data or []  # type: ignore[assignment]
     total_monto = sum(r["monto"] for r in data)
     ultimo = data[0] if data else None
     return {"count": len(data), "total": total_monto, "ultimo": ultimo}
@@ -280,6 +282,7 @@ def _generar_txt(df: pd.DataFrame) -> str:
 
 
 # ─── Cargar empleados ─────────────────────────────────────────
+df_emp = pd.DataFrame(columns=["legajo", "apenom", "empleador"])
 try:
     df_emp = cargar_empleados_activos()
 except Exception:
@@ -340,7 +343,7 @@ with col_form:
                 r = row.iloc[0]
                 try:
                     _guardar(r["legajo"], r["apenom"], r["empleador"], fecha, monto, motivo)
-                    monto_fmt = f"$ {int(monto):,.0f}".replace(",",".")
+                    monto_fmt = f"$ {monto:,.0f}".replace(",",".")
                     st.success(f"✓ Adelanto registrado — **{r['apenom']}** · {fecha.strftime('%d/%m/%Y')} · **{monto_fmt}**")
                     st.cache_data.clear()
                 except Exception as e:
@@ -398,6 +401,7 @@ with col_d:
 with col_h:
     hasta = st.date_input("Hasta", value=hoy, key="hasta_a")
 
+df_reg = pd.DataFrame(columns=["id","legajo","apenom","empleador","fecha_adelanto","monto","motivo"])
 try:
     df_reg = _leer(desde, hasta)
 except Exception as e:
