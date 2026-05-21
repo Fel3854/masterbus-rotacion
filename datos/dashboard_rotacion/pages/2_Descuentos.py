@@ -222,16 +222,19 @@ TIPOS_DESCUENTO = [
 ]
 
 COLORES_TIPO = {
-    "Préstamo":     "#f0f4ff:#2563eb",
-    "Anticipo SAC": "#fff4ed:#ed5d3b",
-    "Infracciones": "#fff1f2:#dc2626",
-    "Vacaciones":   "#f0fdf4:#16a34a",
-    "LINTI":        "#faf5ff:#7c3aed",
-    "Cubiertas":    "#f0fdfa:#0d9488",
-    "Baterías":     "#fefce8:#ca8a04",
-    "Indumentaria": "#fdf2f8:#db2777",
-    "Teléfono":     "#eef2ff:#4f46e5",
+    "Préstamo":          "#f0f4ff:#2563eb",
+    "Anticipo SAC":      "#fff4ed:#ed5d3b",
+    "Infracciones":      "#fff1f2:#dc2626",
+    "Vacaciones":        "#f0fdf4:#16a34a",
+    "LINTI":             "#faf5ff:#7c3aed",
+    "Cubiertas":         "#f0fdfa:#0d9488",
+    "Baterías":          "#fefce8:#ca8a04",
+    "Indumentaria":      "#fdf2f8:#db2777",
+    "Teléfono":          "#eef2ff:#4f46e5",
+    "Adelanto de Sueldo":"#ecfdf5:#059669",
 }
+
+TIPOS_FILTRO = TIPOS_DESCUENTO + ["Adelanto de Sueldo"]
 
 
 # ─── Helpers Supabase ─────────────────────────────────────────
@@ -263,6 +266,23 @@ def _leer(desde: date, hasta: date) -> pd.DataFrame:
 
 def _eliminar(record_id: str):
     get_supabase().table(TABLA).delete().eq("id", record_id).execute()
+
+
+def _leer_adelantos(desde: date, hasta: date) -> pd.DataFrame:
+    resp = (
+        get_supabase().table("adelantos")
+        .select("id,legajo,apenom,empleador,fecha_adelanto,monto,motivo")
+        .gte("fecha_adelanto", str(desde))
+        .lte("fecha_adelanto", str(hasta))
+        .order("fecha_adelanto", desc=True)
+        .execute()
+    )
+    if not resp.data:
+        return pd.DataFrame(columns=["id","legajo","apenom","empleador","tipo_descuento","fecha_descuento","monto","motivo"])
+    df = pd.DataFrame(resp.data)
+    df["fecha_descuento"] = pd.to_datetime(df["fecha_adelanto"]).dt.date
+    df["tipo_descuento"] = "Adelanto de Sueldo"
+    return df[["id","legajo","apenom","empleador","tipo_descuento","fecha_descuento","monto","motivo"]]
 
 
 def _stats_mes() -> dict:
@@ -442,13 +462,17 @@ with col_h:
 with col_tip:
     tipos_filtro = st.multiselect(
         "Filtrar por tipo",
-        options=TIPOS_DESCUENTO,
+        options=TIPOS_FILTRO,
         placeholder="Todos los tipos",
         key="tipos_filtro",
     )
 
 try:
-    df_reg = _leer(desde, hasta)
+    df_desc = _leer(desde, hasta)
+    df_adel = _leer_adelantos(desde, hasta)
+    df_reg = pd.concat([df_desc, df_adel], ignore_index=True).sort_values(
+        "fecha_descuento", ascending=False
+    ).reset_index(drop=True)
 except Exception as e:
     st.error(f"Error al consultar: {e}")
     st.stop()
