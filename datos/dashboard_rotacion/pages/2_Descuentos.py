@@ -210,17 +210,27 @@ TABLA = "descuentos"
 
 # Reemplazar con los tipos reales cuando se indiquen
 TIPOS_DESCUENTO = [
-    "Tipo A",
-    "Tipo B",
-    "Tipo C",
-    "Otro",
+    "Préstamo",
+    "Anticipo SAC",
+    "Infracciones",
+    "Vacaciones",
+    "LINTI",
+    "Cubiertas",
+    "Baterías",
+    "Indumentaria",
+    "Teléfono",
 ]
 
 COLORES_TIPO = {
-    "Tipo A": "#f0f4ff:#2563eb",
-    "Tipo B": "#fff4ed:#ed5d3b",
-    "Tipo C": "#f0fdf4:#16a34a",
-    "Otro":   "#f9f9f9:#666666",
+    "Préstamo":     "#f0f4ff:#2563eb",
+    "Anticipo SAC": "#fff4ed:#ed5d3b",
+    "Infracciones": "#fff1f2:#dc2626",
+    "Vacaciones":   "#f0fdf4:#16a34a",
+    "LINTI":        "#faf5ff:#7c3aed",
+    "Cubiertas":    "#f0fdfa:#0d9488",
+    "Baterías":     "#fefce8:#ca8a04",
+    "Indumentaria": "#fdf2f8:#db2777",
+    "Teléfono":     "#eef2ff:#4f46e5",
 }
 
 
