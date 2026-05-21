@@ -14,5 +14,6 @@ pg = st.navigation([
     st.Page("pages/1_Adelantos_de_Sueldo.py",       title="Adelantos de Sueldo", icon="💵"),
     st.Page("pages/2_Descuentos.py",                title="Descuentos",          icon="📋"),
     st.Page("pages/3_Vencimientos.py",              title="Vencimientos",        icon="⏳"),
+    st.Page("pages/4_Manual_de_Usuario.py",         title="Manual de Usuario",   icon="📖"),
 ])
 pg.run()
