@@ -3,7 +3,7 @@
 import os
 import pandas as pd
 import streamlit as st
-from datetime import date, datetime
+from datetime import date
 
 import sys
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
@@ -300,41 +300,15 @@ def _stats_mes() -> dict:
     return {"count": len(data), "total": total, "ultimo": data[0] if data else None}
 
 
-def _generar_txt(df: pd.DataFrame, desde: date, hasta: date) -> str:
-    lineas = [
-        "DESCUENTOS — GRUPO MASTER",
-        f"Período: {desde.strftime('%d/%m/%Y')} — {hasta.strftime('%d/%m/%Y')}",
-        f"Generado: {datetime.now().strftime('%d/%m/%Y %H:%M')}",
-        "",
-    ]
+def _generar_txt(df: pd.DataFrame) -> str:
     if df.empty:
-        lineas.append("Sin registros para el período seleccionado.")
-    else:
-        w = {
-            "leg": max(6,  df["legajo"].astype(str).str.len().max()),
-            "nom": max(6,  df["apenom"].astype(str).str.len().max()),
-            "emp": max(9,  df["empleador"].astype(str).str.len().max()),
-            "tip": max(4,  df["tipo_descuento"].astype(str).str.len().max()),
-            "fec": 10, "mon": 12,
-            "mot": max(6,  df["motivo"].fillna("").astype(str).str.len().max()),
-        }
-        fmt = f"{{:<{w['leg']}}}  {{:<{w['nom']}}}  {{:<{w['emp']}}}  {{:<{w['tip']}}}  {{:<{w['fec']}}}  {{:>{w['mon']}}}  {{:<{w['mot']}}}"
-        lineas += [
-            fmt.format("LEGAJO","NOMBRE","EMPLEADOR","TIPO","FECHA","MONTO","MOTIVO"),
-            fmt.format("-"*w["leg"],"-"*w["nom"],"-"*w["emp"],"-"*w["tip"],"-"*w["fec"],"-"*w["mon"],"-"*w["mot"]),
-        ]
-        total = 0
-        for _, r in df.iterrows():
-            lineas.append(fmt.format(
-                str(r["legajo"]), str(r["apenom"]), str(r["empleador"]),
-                str(r["tipo_descuento"]),
-                pd.to_datetime(r["fecha_descuento"]).strftime("%d/%m/%Y"),
-                f"$ {int(r['monto']):,.0f}".replace(",","."),
-                str(r["motivo"]) if pd.notna(r["motivo"]) else "",
-            ))
-            total += int(r["monto"])
-        lineas += ["", f"Total registros: {len(df)}", f"Total monto:     $ {total:,.0f}".replace(",",".")]
-    return "\n".join(lineas)
+        return ""
+    lines = []
+    for _, r in df.iterrows():
+        legajo = int(str(r["legajo"]).strip())
+        monto_str = f"{float(r['monto']):.2f}".replace(".", ",")
+        lines.append(f"{legajo:>10} {monto_str:>9}")
+    return "\n".join(lines)
 
 
 # ─── Cargar empleados ─────────────────────────────────────────
@@ -500,7 +474,7 @@ else:
     df_display["Monto ($)"] = df_display["Monto ($)"].apply(lambda x: f"$ {int(x):,.0f}".replace(",","."))
     st.dataframe(df_display, use_container_width=True, hide_index=True)
 
-    txt = _generar_txt(df_reg, desde, hasta)
+    txt = _generar_txt(df_reg)
     st.download_button(
         "⬇  Descargar TXT",
         data=txt.encode("utf-8"),
@@ -510,6 +484,8 @@ else:
 
 # ─── Sección eliminar ─────────────────────────────────────────
 st.divider()
+if st.session_state.pop("deleted_ok_d", False):
+    st.success("Registro eliminado correctamente.")
 with st.expander("Eliminar un registro"):
     if df_reg.empty:
         st.info("No hay registros en el período seleccionado para eliminar.")
@@ -527,15 +503,16 @@ with st.expander("Eliminar un registro"):
             st.session_state["del_label_d"] = sel_label
         st.markdown("</div>", unsafe_allow_html=True)
 
-        if st.session_state.get("del_id_d") == sel_id:
-            st.warning(f"¿Eliminar **{sel_label}**? Esta acción no se puede deshacer.")
+        if "del_id_d" in st.session_state:
+            lbl = st.session_state.get("del_label_d", "este registro")
+            st.warning(f"¿Eliminar **{lbl}**? Esta acción no se puede deshacer.")
             c1, c2 = st.columns([1, 1])
             with c1:
                 if st.button("Sí, eliminar", key="btn_confirm_d"):
                     _eliminar(st.session_state["del_id_d"])
                     st.session_state.pop("del_id_d", None)
                     st.session_state.pop("del_label_d", None)
-                    st.success("Registro eliminado.")
+                    st.session_state["deleted_ok_d"] = True
                     st.rerun()
             with c2:
                 if st.button("Cancelar", key="btn_cancel_d"):

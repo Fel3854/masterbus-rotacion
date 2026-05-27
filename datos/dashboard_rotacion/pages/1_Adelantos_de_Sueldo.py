@@ -437,6 +437,8 @@ else:
 
 # ─── Sección eliminar ─────────────────────────────────────────
 st.divider()
+if st.session_state.pop("deleted_ok_a", False):
+    st.success("Registro eliminado correctamente.")
 with st.expander("Eliminar un registro"):
     if df_reg.empty:
         st.info("No hay registros en el período seleccionado para eliminar.")
@@ -454,15 +456,16 @@ with st.expander("Eliminar un registro"):
             st.session_state["del_label_a"] = sel_label
         st.markdown("</div>", unsafe_allow_html=True)
 
-        if st.session_state.get("del_id_a") == sel_id:
-            st.warning(f"¿Eliminar **{sel_label}**? Esta acción no se puede deshacer.")
+        if "del_id_a" in st.session_state:
+            lbl = st.session_state.get("del_label_a", "este registro")
+            st.warning(f"¿Eliminar **{lbl}**? Esta acción no se puede deshacer.")
             c1, c2 = st.columns([1, 1])
             with c1:
                 if st.button("Sí, eliminar", key="btn_confirm_a"):
                     _eliminar(st.session_state["del_id_a"])
                     st.session_state.pop("del_id_a", None)
                     st.session_state.pop("del_label_a", None)
-                    st.success("Registro eliminado.")
+                    st.session_state["deleted_ok_a"] = True
                     st.rerun()
             with c2:
                 if st.button("Cancelar", key="btn_cancel_a"):
