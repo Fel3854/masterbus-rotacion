@@ -264,8 +264,8 @@ def _leer(desde: date, hasta: date) -> pd.DataFrame:
     return df
 
 
-def _eliminar(record_id: str):
-    get_supabase().table(TABLA).delete().eq("id", record_id).execute()
+def _eliminar(record_id: str, tabla: str = TABLA):
+    get_supabase().table(tabla).delete().eq("id", record_id).execute()
 
 
 def _leer_adelantos(desde: date, hasta: date) -> pd.DataFrame:
@@ -444,6 +444,8 @@ with col_tip:
 try:
     df_desc = _leer(desde, hasta)
     df_adel = _leer_adelantos(desde, hasta)
+    df_desc["_tabla"] = TABLA
+    df_adel["_tabla"] = "adelantos"
     df_reg = pd.concat([df_desc, df_adel], ignore_index=True).sort_values(
         "fecha_descuento", ascending=False
     ).reset_index(drop=True)
@@ -466,7 +468,7 @@ else:
     </div>
     """, unsafe_allow_html=True)
 
-    df_display = df_reg.rename(columns={
+    df_display = df_reg.drop(columns=["_tabla"]).rename(columns={
         "legajo":"Legajo","apenom":"Nombre","empleador":"Empleador",
         "tipo_descuento":"Tipo","fecha_descuento":"Fecha",
         "monto":"Monto ($)","motivo":"Motivo",
@@ -491,15 +493,16 @@ with st.expander("Eliminar un registro"):
         st.info("No hay registros en el período seleccionado para eliminar.")
     else:
         opciones = {
-            f"{row['fecha_descuento'].strftime('%d/%m/%Y')}  —  {row['apenom']}  —  {row['tipo_descuento']}  —  $ {int(row['monto']):,}".replace(",", "."): row["id"]
+            f"{row['fecha_descuento'].strftime('%d/%m/%Y')}  —  {row['apenom']}  —  {row['tipo_descuento']}  —  $ {int(row['monto']):,}".replace(",", "."): (row["id"], row["_tabla"])
             for _, row in df_reg.iterrows()
         }
         sel_label = st.selectbox("Seleccionar registro", list(opciones.keys()), key="sel_borrar_d")
-        sel_id = opciones[sel_label]
+        sel_id, sel_tabla = opciones[sel_label]
 
         st.markdown('<div class="delete-btn-wrap">', unsafe_allow_html=True)
         if st.button("Eliminar registro", key="btn_del_d"):
             st.session_state["del_id_d"] = sel_id
+            st.session_state["del_tabla_d"] = sel_tabla
             st.session_state["del_label_d"] = sel_label
         st.markdown("</div>", unsafe_allow_html=True)
 
@@ -509,8 +512,9 @@ with st.expander("Eliminar un registro"):
             c1, c2 = st.columns([1, 1])
             with c1:
                 if st.button("Sí, eliminar", key="btn_confirm_d"):
-                    _eliminar(st.session_state["del_id_d"])
+                    _eliminar(st.session_state["del_id_d"], st.session_state["del_tabla_d"])
                     st.session_state.pop("del_id_d", None)
+                    st.session_state.pop("del_tabla_d", None)
                     st.session_state.pop("del_label_d", None)
                     st.session_state["deleted_ok_d"] = True
                     st.rerun()
