@@ -1,10 +1,13 @@
 """Utilidades compartidas entre las páginas del dashboard."""
 
+import logging
 import requests
 import pandas as pd
 import streamlit as st
 from datetime import datetime
 from supabase import create_client, Client
+
+logger = logging.getLogger(__name__)
 
 API_URL = "https://traficonuevo.masterbus.net/api/v1/auto/e"
 
@@ -52,10 +55,14 @@ def _parse_fecha(s):
         return None
 
 
-@st.cache_data(ttl=3600, show_spinner="Cargando datos de empleados...")
+@st.cache_data(ttl=3600, max_entries=1, show_spinner="Cargando datos de empleados...")
 def cargar_datos():
-    resp = requests.get(API_URL, timeout=30)
-    resp.raise_for_status()
+    try:
+        resp = requests.get(API_URL, timeout=30)
+        resp.raise_for_status()
+    except requests.RequestException as e:
+        logger.error("Error al cargar datos desde la API: %s", e)
+        raise
 
     df = pd.DataFrame(resp.json())
     df = df[df["empleador"].isin(GRUPO_MASTER)].copy()
@@ -79,6 +86,12 @@ def cargar_empleados_activos():
     activos["apenom"] = activos["apenom"].str.strip().str.upper()
     activos = activos.sort_values("apenom").reset_index(drop=True)
     return activos
+
+
+def slug_empleador(nombre: str) -> str:
+    """'MASTER BUS S.A' -> 'MASTER_BUS_SA' para usar en nombres de archivo."""
+    s = (nombre or "").strip().upper().replace(".", "").replace(",", "")
+    return "_".join(s.split()) or "EMPRESA"
 
 
 def inyectar_css_base():

@@ -7,7 +7,7 @@ from datetime import date
 
 import sys
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
-from utils import cargar_empleados_activos, get_supabase, COLOR_PRIMARY, COLOR_SECONDARY
+from utils import cargar_empleados_activos, get_supabase, slug_empleador, COLOR_PRIMARY, COLOR_SECONDARY
 
 # ─── CSS ─────────────────────────────────────────────────────
 st.markdown(f"""
@@ -292,10 +292,13 @@ except Exception:
         st.rerun()
     st.stop()
 
-opciones_emp = [
-    f"{r['legajo']} — {r['apenom']}  ·  {r['empleador']}"
+# Mapa opción -> fila exacta (legajo+apenom+empleador identifican unívocamente,
+# evitando que un legajo repetido en otra empresa traiga al empleado equivocado)
+opciones_map = {
+    f"{r['legajo']} — {r['apenom']}  ·  {r['empleador']}": r
     for _, r in df_emp.iterrows()
-]
+}
+opciones_emp = list(opciones_map.keys())
 
 # ─── Header ──────────────────────────────────────────────────
 st.markdown("""
@@ -335,19 +338,17 @@ with col_form:
         elif not monto:
             st.error("Ingresá un monto mayor a cero.")
         else:
-            legajo_sel = empleado_sel.split(" — ")[0].strip()
-            row = df_emp[df_emp["legajo"] == legajo_sel]
-            if row.empty:
+            r = opciones_map.get(empleado_sel)
+            if r is None:
                 st.error("No se encontró el empleado. Intentá de nuevo.")
             else:
-                r = row.iloc[0]
                 try:
                     _guardar(r["legajo"], r["apenom"], r["empleador"], fecha, monto, motivo)
                     monto_fmt = f"$ {monto:,.0f}".replace(",",".")
                     st.success(f"✓ Adelanto registrado — **{r['apenom']}** · {fecha.strftime('%d/%m/%Y')} · **{monto_fmt}**")
                     st.cache_data.clear()
-                except Exception as e:
-                    st.error(f"Error al guardar: {e}")
+                except Exception:
+                    st.error("No se pudo registrar el adelanto. Intentá de nuevo.")
 
 with col_stats:
     st.markdown('<p class="section-label">Resumen del mes actual</p>', unsafe_allow_html=True)
@@ -395,7 +396,10 @@ st.divider()
 st.markdown('<p class="section-label">Descargar listado</p>', unsafe_allow_html=True)
 
 hoy = date.today()
-col_d, col_h, col_btn = st.columns([2, 2, 3], gap="medium")
+empleadores_disp = sorted(df_emp["empleador"].dropna().unique())
+col_emp, col_d, col_h = st.columns([2, 2, 2], gap="medium")
+with col_emp:
+    empleador_sel = st.selectbox("Empleador", options=empleadores_disp, index=0, key="empleador_a")
 with col_d:
     desde = st.date_input("Desde", value=hoy.replace(day=1), key="desde_a")
 with col_h:
@@ -404,9 +408,11 @@ with col_h:
 df_reg = pd.DataFrame(columns=["id","legajo","apenom","empleador","fecha_adelanto","monto","motivo"])
 try:
     df_reg = _leer(desde, hasta)
-except Exception as e:
-    st.error(f"Error al consultar: {e}")
+except Exception:
+    st.error("No se pudieron cargar los registros. Intentá de nuevo.")
     st.stop()
+
+df_reg = df_reg[df_reg["empleador"] == empleador_sel]
 
 if df_reg.empty:
     st.info("No hay adelantos registrados para el período seleccionado.")
@@ -431,7 +437,7 @@ else:
     st.download_button(
         "⬇  Descargar TXT",
         data=txt.encode("utf-8"),
-        file_name=f"adelantos_{desde.strftime('%Y%m%d')}_{hasta.strftime('%Y%m%d')}.txt",
+        file_name=f"{slug_empleador(empleador_sel)}_{desde.strftime('%d-%m-%Y')}_a_{hasta.strftime('%d-%m-%Y')}.txt",
         mime="text/plain",
     )
 
