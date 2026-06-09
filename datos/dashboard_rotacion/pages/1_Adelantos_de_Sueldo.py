@@ -396,7 +396,8 @@ st.divider()
 st.markdown('<p class="section-label">Descargar listado</p>', unsafe_allow_html=True)
 
 hoy = date.today()
-empleadores_disp = sorted(df_emp["empleador"].dropna().unique())
+TODAS_EMPRESAS = "Todas las empresas"
+empleadores_disp = [TODAS_EMPRESAS] + sorted(df_emp["empleador"].dropna().unique())
 col_emp, col_d, col_h = st.columns([2, 2, 2], gap="medium")
 with col_emp:
     empleador_sel = st.selectbox("Empleador", options=empleadores_disp, index=0, key="empleador_a")
@@ -412,7 +413,8 @@ except Exception:
     st.error("No se pudieron cargar los registros. Intentá de nuevo.")
     st.stop()
 
-df_reg = df_reg[df_reg["empleador"] == empleador_sel]
+if empleador_sel != TODAS_EMPRESAS:
+    df_reg = df_reg[df_reg["empleador"] == empleador_sel]
 
 if df_reg.empty:
     st.info("No hay adelantos registrados para el período seleccionado.")
