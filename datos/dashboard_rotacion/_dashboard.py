@@ -453,12 +453,15 @@ ul[data-baseweb="menu"] {{
 
 
 # ─── Session state para filtros ──────────────────────────────
+if "empleadores_sel" not in st.session_state:
+    st.session_state.empleadores_sel = []
 if "cargos_sel" not in st.session_state:
     st.session_state.cargos_sel = []
 if "sectores_sel" not in st.session_state:
     st.session_state.sectores_sel = []
 
 def _borrar_filtros():
+    st.session_state.empleadores_sel = []
     st.session_state.cargos_sel = []
     st.session_state.sectores_sel = []
 
@@ -507,6 +510,13 @@ with st.sidebar:
     </div>
     """, unsafe_allow_html=True)
 
+    empleadores_disp = sorted(df_raw["empleador"].dropna().unique())
+    empleadores_sel = st.multiselect(
+        "Empleador / Empresa", empleadores_disp,
+        key="empleadores_sel",
+        placeholder="Todas las empresas",
+    )
+
     cargos_disp = sorted(df_raw["cargo"].dropna().unique())
     cargos_sel = st.multiselect(
         "Cargo / Puesto", cargos_disp,
@@ -535,6 +545,8 @@ with st.sidebar:
 
 # ─── Aplicar filtros ─────────────────────────────────────────
 df = df_raw.copy()
+if empleadores_sel:
+    df = df[df["empleador"].isin(empleadores_sel)]
 if cargos_sel:
     df = df[df["cargo"].isin(cargos_sel)]
 if sectores_sel:
@@ -737,6 +749,45 @@ elif tasa > media_hist and media_hist > 0:
     st.warning(
         f"**Rotación por encima del promedio** — {tasa:.1f}% vs media histórica {media_hist:.1f}%."
     )
+
+# ─── Bajas del período (detalle nominal) ─────────────────────
+st.markdown(f"""
+<div style="display:flex;align-items:center;gap:8px;margin:12px 0 8px;">
+  <div style="width:3px;height:18px;background:{COLOR_PRIMARY};border-radius:2px;"></div>
+  <span style="font-weight:700;font-size:1rem;color:{COLOR_TEXT};">Bajas del período — {label_periodo}</span>
+</div>
+""", unsafe_allow_html=True)
+
+if df_bajas.empty:
+    st.info("No hubo bajas en el período seleccionado.")
+else:
+    _b = df_bajas.copy().sort_values("fecha_fin", ascending=False)
+
+    def _antig_meses(row):
+        if row["fecha_inicio"] and row["fecha_fin"]:
+            d = relativedelta(row["fecha_fin"], row["fecha_inicio"])
+            return d.years * 12 + d.months
+        return None
+
+    tabla_bajas = pd.DataFrame({
+        "Legajo":  _b["legajo"],
+        "Nombre":  _b["apenom"],
+        "Empresa": _b["empleador"],
+        "Cargo":   _b["cargo"].str.title(),
+        "Sector":  _b["str"],
+        "Ingreso": _b["fecha_inicio"].apply(lambda d: d.strftime("%d/%m/%Y") if d else "—"),
+        "Baja":    _b["fecha_fin"].apply(lambda d: d.strftime("%d/%m/%Y") if d else "—"),
+        "Antigüedad (meses)": _b.apply(_antig_meses, axis=1),
+    })
+    st.dataframe(tabla_bajas, use_container_width=True, hide_index=True)
+    st.download_button(
+        "⬇  Descargar CSV",
+        data=tabla_bajas.to_csv(index=False).encode("utf-8"),
+        file_name=f"bajas_{label_periodo.replace(' ', '_')}.csv",
+        mime="text/csv",
+    )
+
+st.divider()
 
 # ─── Evolución temporal ──────────────────────────────────────
 st.markdown(f"""
