@@ -14,7 +14,7 @@ import streamlit as st
 
 # ─── Usuarios y permisos ─────────────────────────────────────
 USERS = {
-    "lu":     {"name": "Lu",     "edit_adelantos": True,  "edit_descuentos": False},
+    "lu":     {"name": "Lu",     "edit_adelantos": True,  "edit_descuentos": True},
     "victor": {"name": "Victor", "edit_adelantos": False, "edit_descuentos": True},
     "flor":   {"name": "Flor",   "edit_adelantos": True,  "edit_descuentos": True},
 }
