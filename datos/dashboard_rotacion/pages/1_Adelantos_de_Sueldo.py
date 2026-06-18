@@ -8,6 +8,7 @@ from datetime import date
 import sys
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 from utils import cargar_empleados_activos, get_supabase, slug_empleador, COLOR_PRIMARY, COLOR_SECONDARY
+from auth import can_edit
 
 # ─── CSS ─────────────────────────────────────────────────────
 st.markdown(f"""
@@ -313,42 +314,46 @@ st.markdown("""
 col_form, col_stats = st.columns([3, 2], gap="large")
 
 with col_form:
-    st.markdown('<p class="section-label">Registrar adelanto</p>', unsafe_allow_html=True)
+    if not can_edit("adelantos"):
+        st.markdown('<p class="section-label">Adelantos</p>', unsafe_allow_html=True)
+        st.caption("Modo solo lectura — no tenés permiso para registrar adelantos.")
+    else:
+        st.markdown('<p class="section-label">Registrar adelanto</p>', unsafe_allow_html=True)
 
-    with st.form("form_adelanto", clear_on_submit=True):
-        empleado_sel = st.selectbox(
-            "Empleado",
-            options=opciones_emp,
-            index=None,
-            placeholder="Escribí nombre, apellido o legajo para buscar...",
-        )
-        col_f, col_m = st.columns(2)
-        with col_f:
-            fecha = st.date_input("Fecha del adelanto", value=date.today())
-        with col_m:
-            monto = st.number_input("Monto ($)", min_value=1, step=500, value=None,
-                                    placeholder="Ej: 50000")
-        motivo = st.text_area("Motivo", max_chars=300,
-                               placeholder="Opcional — razón del adelanto", height=90)
-        submitted = st.form_submit_button("Registrar adelanto")
+        with st.form("form_adelanto", clear_on_submit=True):
+            empleado_sel = st.selectbox(
+                "Empleado",
+                options=opciones_emp,
+                index=None,
+                placeholder="Escribí nombre, apellido o legajo para buscar...",
+            )
+            col_f, col_m = st.columns(2)
+            with col_f:
+                fecha = st.date_input("Fecha del adelanto", value=date.today())
+            with col_m:
+                monto = st.number_input("Monto ($)", min_value=1, step=500, value=None,
+                                        placeholder="Ej: 50000")
+            motivo = st.text_area("Motivo", max_chars=300,
+                                   placeholder="Opcional — razón del adelanto", height=90)
+            submitted = st.form_submit_button("Registrar adelanto")
 
-    if submitted:
-        if not empleado_sel:
-            st.error("Seleccioná un empleado para continuar.")
-        elif not monto:
-            st.error("Ingresá un monto mayor a cero.")
-        else:
-            r = opciones_map.get(empleado_sel)
-            if r is None:
-                st.error("No se encontró el empleado. Intentá de nuevo.")
+        if submitted:
+            if not empleado_sel:
+                st.error("Seleccioná un empleado para continuar.")
+            elif not monto:
+                st.error("Ingresá un monto mayor a cero.")
             else:
-                try:
-                    _guardar(r["legajo"], r["apenom"], r["empleador"], fecha, monto, motivo)
-                    monto_fmt = f"$ {monto:,.0f}".replace(",",".")
-                    st.success(f"✓ Adelanto registrado — **{r['apenom']}** · {fecha.strftime('%d/%m/%Y')} · **{monto_fmt}**")
-                    st.cache_data.clear()
-                except Exception:
-                    st.error("No se pudo registrar el adelanto. Intentá de nuevo.")
+                r = opciones_map.get(empleado_sel)
+                if r is None:
+                    st.error("No se encontró el empleado. Intentá de nuevo.")
+                else:
+                    try:
+                        _guardar(r["legajo"], r["apenom"], r["empleador"], fecha, monto, motivo)
+                        monto_fmt = f"$ {monto:,.0f}".replace(",",".")
+                        st.success(f"✓ Adelanto registrado — **{r['apenom']}** · {fecha.strftime('%d/%m/%Y')} · **{monto_fmt}**")
+                        st.cache_data.clear()
+                    except Exception:
+                        st.error("No se pudo registrar el adelanto. Intentá de nuevo.")
 
 with col_stats:
     st.markdown('<p class="section-label">Resumen del mes actual</p>', unsafe_allow_html=True)
@@ -396,8 +401,7 @@ st.divider()
 st.markdown('<p class="section-label">Descargar listado</p>', unsafe_allow_html=True)
 
 hoy = date.today()
-TODAS_EMPRESAS = "Todas las empresas"
-empleadores_disp = [TODAS_EMPRESAS] + sorted(df_emp["empleador"].dropna().unique())
+empleadores_disp = sorted(df_emp["empleador"].dropna().unique())
 col_emp, col_d, col_h = st.columns([2, 2, 2], gap="medium")
 with col_emp:
     empleador_sel = st.selectbox("Empleador", options=empleadores_disp, index=0, key="empleador_a")
@@ -413,8 +417,7 @@ except Exception:
     st.error("No se pudieron cargar los registros. Intentá de nuevo.")
     st.stop()
 
-if empleador_sel != TODAS_EMPRESAS:
-    df_reg = df_reg[df_reg["empleador"] == empleador_sel]
+df_reg = df_reg[df_reg["empleador"] == empleador_sel]
 
 if df_reg.empty:
     st.info("No hay adelantos registrados para el período seleccionado.")
@@ -444,39 +447,40 @@ else:
     )
 
 # ─── Sección eliminar ─────────────────────────────────────────
-st.divider()
-if st.session_state.pop("deleted_ok_a", False):
-    st.success("Registro eliminado correctamente.")
-with st.expander("Eliminar un registro"):
-    if df_reg.empty:
-        st.info("No hay registros en el período seleccionado para eliminar.")
-    else:
-        opciones = {
-            f"{row['fecha_adelanto'].strftime('%d/%m/%Y')}  —  {row['apenom']}  —  $ {int(row['monto']):,}".replace(",", "."): row["id"]
-            for _, row in df_reg.iterrows()
-        }
-        sel_label = st.selectbox("Seleccionar registro", list(opciones.keys()), key="sel_borrar_a")
-        sel_id = opciones[sel_label]
+if can_edit("adelantos"):
+    st.divider()
+    if st.session_state.pop("deleted_ok_a", False):
+        st.success("Registro eliminado correctamente.")
+    with st.expander("Eliminar un registro"):
+        if df_reg.empty:
+            st.info("No hay registros en el período seleccionado para eliminar.")
+        else:
+            opciones = {
+                f"{row['fecha_adelanto'].strftime('%d/%m/%Y')}  —  {row['apenom']}  —  $ {int(row['monto']):,}".replace(",", "."): row["id"]
+                for _, row in df_reg.iterrows()
+            }
+            sel_label = st.selectbox("Seleccionar registro", list(opciones.keys()), key="sel_borrar_a")
+            sel_id = opciones[sel_label]
 
-        st.markdown('<div class="delete-btn-wrap">', unsafe_allow_html=True)
-        if st.button("Eliminar registro", key="btn_del_a"):
-            st.session_state["del_id_a"] = sel_id
-            st.session_state["del_label_a"] = sel_label
-        st.markdown("</div>", unsafe_allow_html=True)
+            st.markdown('<div class="delete-btn-wrap">', unsafe_allow_html=True)
+            if st.button("Eliminar registro", key="btn_del_a"):
+                st.session_state["del_id_a"] = sel_id
+                st.session_state["del_label_a"] = sel_label
+            st.markdown("</div>", unsafe_allow_html=True)
 
-        if "del_id_a" in st.session_state:
-            lbl = st.session_state.get("del_label_a", "este registro")
-            st.warning(f"¿Eliminar **{lbl}**? Esta acción no se puede deshacer.")
-            c1, c2 = st.columns([1, 1])
-            with c1:
-                if st.button("Sí, eliminar", key="btn_confirm_a"):
-                    _eliminar(st.session_state["del_id_a"])
-                    st.session_state.pop("del_id_a", None)
-                    st.session_state.pop("del_label_a", None)
-                    st.session_state["deleted_ok_a"] = True
-                    st.rerun()
-            with c2:
-                if st.button("Cancelar", key="btn_cancel_a"):
-                    st.session_state.pop("del_id_a", None)
-                    st.session_state.pop("del_label_a", None)
-                    st.rerun()
+            if "del_id_a" in st.session_state:
+                lbl = st.session_state.get("del_label_a", "este registro")
+                st.warning(f"¿Eliminar **{lbl}**? Esta acción no se puede deshacer.")
+                c1, c2 = st.columns([1, 1])
+                with c1:
+                    if st.button("Sí, eliminar", key="btn_confirm_a"):
+                        _eliminar(st.session_state["del_id_a"])
+                        st.session_state.pop("del_id_a", None)
+                        st.session_state.pop("del_label_a", None)
+                        st.session_state["deleted_ok_a"] = True
+                        st.rerun()
+                with c2:
+                    if st.button("Cancelar", key="btn_cancel_a"):
+                        st.session_state.pop("del_id_a", None)
+                        st.session_state.pop("del_label_a", None)
+                        st.rerun()

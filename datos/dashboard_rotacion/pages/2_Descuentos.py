@@ -10,6 +10,7 @@ from dateutil.relativedelta import relativedelta
 import sys
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 from utils import cargar_empleados_activos, get_supabase, slug_empleador, COLOR_PRIMARY, COLOR_SECONDARY
+from auth import can_edit
 
 # ─── CSS ─────────────────────────────────────────────────────
 st.markdown(f"""
@@ -365,62 +366,66 @@ st.markdown("""
 col_form, col_stats = st.columns([3, 2], gap="large")
 
 with col_form:
-    st.markdown('<p class="section-label">Registrar descuento</p>', unsafe_allow_html=True)
+    if not can_edit("descuentos"):
+        st.markdown('<p class="section-label">Descuentos</p>', unsafe_allow_html=True)
+        st.caption("Modo solo lectura — no tenés permiso para registrar descuentos.")
+    else:
+        st.markdown('<p class="section-label">Registrar descuento</p>', unsafe_allow_html=True)
 
-    with st.form("form_descuento", clear_on_submit=True):
-        empleado_sel = st.selectbox(
-            "Empleado",
-            options=opciones_emp,
-            index=None,
-            placeholder="Escribí nombre, apellido o legajo para buscar...",
-        )
-        tipo = st.selectbox("Tipo de descuento", options=TIPOS_DESCUENTO, index=0)
+        with st.form("form_descuento", clear_on_submit=True):
+            empleado_sel = st.selectbox(
+                "Empleado",
+                options=opciones_emp,
+                index=None,
+                placeholder="Escribí nombre, apellido o legajo para buscar...",
+            )
+            tipo = st.selectbox("Tipo de descuento", options=TIPOS_DESCUENTO, index=0)
 
-        col_f, col_m, col_c = st.columns([2, 2, 1])
-        with col_f:
-            fecha = st.date_input("Fecha del descuento", value=date.today())
-        with col_m:
-            monto = st.number_input("Monto total ($)", min_value=1, step=500, value=None,
-                                    placeholder="Ej: 15000")
-        with col_c:
-            cuotas = st.number_input("Cuotas", min_value=1, max_value=60, step=1, value=1,
-                                     help="Cantidad de cuotas mensuales. El monto total se divide entre ellas.")
-        motivo = st.text_area("Motivo", max_chars=300,
-                               placeholder="Opcional — descripción del descuento", height=90)
-        submitted = st.form_submit_button("Registrar descuento")
+            col_f, col_m, col_c = st.columns([2, 2, 1])
+            with col_f:
+                fecha = st.date_input("Fecha del descuento", value=date.today())
+            with col_m:
+                monto = st.number_input("Monto total ($)", min_value=1, step=500, value=None,
+                                        placeholder="Ej: 15000")
+            with col_c:
+                cuotas = st.number_input("Cuotas", min_value=1, max_value=60, step=1, value=1,
+                                         help="Cantidad de cuotas mensuales. El monto total se divide entre ellas.")
+            motivo = st.text_area("Motivo", max_chars=300,
+                                   placeholder="Opcional — descripción del descuento", height=90)
+            submitted = st.form_submit_button("Registrar descuento")
 
-    if submitted:
-        if not empleado_sel:
-            st.error("Seleccioná un empleado para continuar.")
-        elif not monto:
-            st.error("Ingresá un monto mayor a cero.")
-        elif int(monto) < int(cuotas):
-            st.error("El monto no alcanza para esa cantidad de cuotas.")
-        else:
-            r = opciones_map.get(empleado_sel)
-            if r is None:
-                st.error("No se encontró el empleado. Intentá de nuevo.")
+        if submitted:
+            if not empleado_sel:
+                st.error("Seleccioná un empleado para continuar.")
+            elif not monto:
+                st.error("Ingresá un monto mayor a cero.")
+            elif int(monto) < int(cuotas):
+                st.error("El monto no alcanza para esa cantidad de cuotas.")
             else:
-                try:
-                    n = int(cuotas)
-                    total = int(monto)
-                    if n == 1:
-                        _guardar(r["legajo"], r["apenom"], r["empleador"], tipo, fecha, total, motivo)
-                    else:
-                        grupo_id = str(uuid.uuid4())
-                        for i, m in enumerate(_split_cuotas(total, n)):
-                            _guardar(
-                                r["legajo"], r["apenom"], r["empleador"], tipo,
-                                fecha + relativedelta(months=i), m, motivo,
-                                grupo_id=grupo_id, cuota_numero=i + 1,
-                                cuotas_total=n, monto_total=total,
-                            )
-                    monto_fmt = f"$ {total:,.0f}".replace(",",".")
-                    detalle = f"en {n} cuotas" if n > 1 else "en 1 pago"
-                    st.success(f"✓ Descuento registrado — **{r['apenom']}** · {tipo} · {fecha.strftime('%d/%m/%Y')} · **{monto_fmt}** {detalle}")
-                    st.cache_data.clear()
-                except Exception:
-                    st.error("No se pudo registrar el descuento. Intentá de nuevo.")
+                r = opciones_map.get(empleado_sel)
+                if r is None:
+                    st.error("No se encontró el empleado. Intentá de nuevo.")
+                else:
+                    try:
+                        n = int(cuotas)
+                        total = int(monto)
+                        if n == 1:
+                            _guardar(r["legajo"], r["apenom"], r["empleador"], tipo, fecha, total, motivo)
+                        else:
+                            grupo_id = str(uuid.uuid4())
+                            for i, m in enumerate(_split_cuotas(total, n)):
+                                _guardar(
+                                    r["legajo"], r["apenom"], r["empleador"], tipo,
+                                    fecha + relativedelta(months=i), m, motivo,
+                                    grupo_id=grupo_id, cuota_numero=i + 1,
+                                    cuotas_total=n, monto_total=total,
+                                )
+                        monto_fmt = f"$ {total:,.0f}".replace(",",".")
+                        detalle = f"en {n} cuotas" if n > 1 else "en 1 pago"
+                        st.success(f"✓ Descuento registrado — **{r['apenom']}** · {tipo} · {fecha.strftime('%d/%m/%Y')} · **{monto_fmt}** {detalle}")
+                        st.cache_data.clear()
+                    except Exception:
+                        st.error("No se pudo registrar el descuento. Intentá de nuevo.")
 
 with col_stats:
     st.markdown('<p class="section-label">Resumen del mes actual</p>', unsafe_allow_html=True)
@@ -470,8 +475,7 @@ st.divider()
 st.markdown('<p class="section-label">Descargar listado</p>', unsafe_allow_html=True)
 
 hoy = date.today()
-TODAS_EMPRESAS = "Todas las empresas"
-empleadores_disp = [TODAS_EMPRESAS] + sorted(df_emp["empleador"].dropna().unique())
+empleadores_disp = sorted(df_emp["empleador"].dropna().unique())
 col_emp, col_d, col_h, col_tip = st.columns([2, 2, 2, 2], gap="medium")
 with col_emp:
     empleador_sel = st.selectbox("Empleador", options=empleadores_disp, index=0, key="empleador_d")
@@ -499,8 +503,7 @@ except Exception:
     st.error("No se pudieron cargar los registros. Intentá de nuevo.")
     st.stop()
 
-if empleador_sel != TODAS_EMPRESAS:
-    df_reg = df_reg[df_reg["empleador"] == empleador_sel]
+df_reg = df_reg[df_reg["empleador"] == empleador_sel]
 
 if tipos_filtro:
     df_reg = df_reg[df_reg["tipo_descuento"].isin(tipos_filtro)]
@@ -541,58 +544,59 @@ else:
     )
 
 # ─── Sección eliminar ─────────────────────────────────────────
-st.divider()
-if st.session_state.pop("deleted_ok_d", False):
-    st.success("Registro eliminado correctamente.")
-with st.expander("Eliminar un registro"):
-    if df_reg.empty:
-        st.info("No hay registros en el período seleccionado para eliminar.")
-    else:
-        opciones = {}
-        for _, row in df_reg.iterrows():
-            ct = int(row.get("cuotas_total") or 1)
-            cuota_lbl = f"  —  Cuota {int(row['cuota_numero'])}/{ct}" if ct > 1 else ""
-            etiqueta = (
-                f"{row['fecha_descuento'].strftime('%d/%m/%Y')}  —  {row['apenom']}  —  "
-                f"{row['tipo_descuento']}  —  $ {int(row['monto']):,}".replace(",", ".")
-                + cuota_lbl
-            )
-            opciones[etiqueta] = (row["id"], row["_tabla"], row.get("grupo_id"), ct)
-        sel_label = st.selectbox("Seleccionar registro", list(opciones.keys()), key="sel_borrar_d")
-        sel_id, sel_tabla, sel_grupo, sel_ct = opciones[sel_label]
-
-        st.markdown('<div class="delete-btn-wrap">', unsafe_allow_html=True)
-        if st.button("Eliminar registro", key="btn_del_d"):
-            st.session_state["del_id_d"] = sel_id
-            st.session_state["del_tabla_d"] = sel_tabla
-            st.session_state["del_grupo_d"] = sel_grupo
-            st.session_state["del_ct_d"] = sel_ct
-            st.session_state["del_label_d"] = sel_label
-        st.markdown("</div>", unsafe_allow_html=True)
-
-        if "del_id_d" in st.session_state:
-            lbl = st.session_state.get("del_label_d", "este registro")
-            es_grupo = bool(st.session_state.get("del_grupo_d")) and int(st.session_state.get("del_ct_d", 1)) > 1
-            if es_grupo:
-                st.warning(
-                    f"**{lbl}** pertenece a un plan de {int(st.session_state['del_ct_d'])} cuotas. "
-                    "Se eliminarán **todas las cuotas** del descuento. Esta acción no se puede deshacer."
+if can_edit("descuentos"):
+    st.divider()
+    if st.session_state.pop("deleted_ok_d", False):
+        st.success("Registro eliminado correctamente.")
+    with st.expander("Eliminar un registro"):
+        if df_reg.empty:
+            st.info("No hay registros en el período seleccionado para eliminar.")
+        else:
+            opciones = {}
+            for _, row in df_reg.iterrows():
+                ct = int(row.get("cuotas_total") or 1)
+                cuota_lbl = f"  —  Cuota {int(row['cuota_numero'])}/{ct}" if ct > 1 else ""
+                etiqueta = (
+                    f"{row['fecha_descuento'].strftime('%d/%m/%Y')}  —  {row['apenom']}  —  "
+                    f"{row['tipo_descuento']}  —  $ {int(row['monto']):,}".replace(",", ".")
+                    + cuota_lbl
                 )
-            else:
-                st.warning(f"¿Eliminar **{lbl}**? Esta acción no se puede deshacer.")
-            c1, c2 = st.columns([1, 1])
-            with c1:
-                if st.button("Sí, eliminar", key="btn_confirm_d"):
-                    if es_grupo:
-                        _eliminar_grupo(st.session_state["del_grupo_d"])
-                    else:
-                        _eliminar(st.session_state["del_id_d"], st.session_state["del_tabla_d"])
-                    for _k in ("del_id_d", "del_tabla_d", "del_grupo_d", "del_ct_d", "del_label_d"):
-                        st.session_state.pop(_k, None)
-                    st.session_state["deleted_ok_d"] = True
-                    st.rerun()
-            with c2:
-                if st.button("Cancelar", key="btn_cancel_d"):
-                    for _k in ("del_id_d", "del_tabla_d", "del_grupo_d", "del_ct_d", "del_label_d"):
-                        st.session_state.pop(_k, None)
-                    st.rerun()
+                opciones[etiqueta] = (row["id"], row["_tabla"], row.get("grupo_id"), ct)
+            sel_label = st.selectbox("Seleccionar registro", list(opciones.keys()), key="sel_borrar_d")
+            sel_id, sel_tabla, sel_grupo, sel_ct = opciones[sel_label]
+
+            st.markdown('<div class="delete-btn-wrap">', unsafe_allow_html=True)
+            if st.button("Eliminar registro", key="btn_del_d"):
+                st.session_state["del_id_d"] = sel_id
+                st.session_state["del_tabla_d"] = sel_tabla
+                st.session_state["del_grupo_d"] = sel_grupo
+                st.session_state["del_ct_d"] = sel_ct
+                st.session_state["del_label_d"] = sel_label
+            st.markdown("</div>", unsafe_allow_html=True)
+
+            if "del_id_d" in st.session_state:
+                lbl = st.session_state.get("del_label_d", "este registro")
+                es_grupo = bool(st.session_state.get("del_grupo_d")) and int(st.session_state.get("del_ct_d", 1)) > 1
+                if es_grupo:
+                    st.warning(
+                        f"**{lbl}** pertenece a un plan de {int(st.session_state['del_ct_d'])} cuotas. "
+                        "Se eliminarán **todas las cuotas** del descuento. Esta acción no se puede deshacer."
+                    )
+                else:
+                    st.warning(f"¿Eliminar **{lbl}**? Esta acción no se puede deshacer.")
+                c1, c2 = st.columns([1, 1])
+                with c1:
+                    if st.button("Sí, eliminar", key="btn_confirm_d"):
+                        if es_grupo:
+                            _eliminar_grupo(st.session_state["del_grupo_d"])
+                        else:
+                            _eliminar(st.session_state["del_id_d"], st.session_state["del_tabla_d"])
+                        for _k in ("del_id_d", "del_tabla_d", "del_grupo_d", "del_ct_d", "del_label_d"):
+                            st.session_state.pop(_k, None)
+                        st.session_state["deleted_ok_d"] = True
+                        st.rerun()
+                with c2:
+                    if st.button("Cancelar", key="btn_cancel_d"):
+                        for _k in ("del_id_d", "del_tabla_d", "del_grupo_d", "del_ct_d", "del_label_d"):
+                            st.session_state.pop(_k, None)
+                        st.rerun()
