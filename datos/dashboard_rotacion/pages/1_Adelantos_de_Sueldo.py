@@ -9,6 +9,7 @@ import sys
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 from utils import cargar_empleados_activos, get_supabase, slug_empleador, COLOR_PRIMARY, COLOR_SECONDARY
 from auth import can_edit
+import santander
 
 # ─── CSS ─────────────────────────────────────────────────────
 st.markdown(f"""
@@ -271,17 +272,6 @@ def _stats_mes() -> dict:
     return {"count": len(data), "total": total_monto, "ultimo": ultimo}
 
 
-def _generar_txt(df: pd.DataFrame) -> str:
-    if df.empty:
-        return ""
-    lines = []
-    for _, r in df.iterrows():
-        legajo = int(str(r["legajo"]).strip())
-        monto_str = f"{float(r['monto']):.2f}".replace(".", ",")
-        lines.append(f"{legajo:>10} {monto_str:>9}")
-    return "\n".join(lines)
-
-
 # ─── Cargar empleados ─────────────────────────────────────────
 df_emp = pd.DataFrame(columns=["legajo", "apenom", "empleador"])
 try:
@@ -402,13 +392,15 @@ st.markdown('<p class="section-label">Descargar listado</p>', unsafe_allow_html=
 
 hoy = date.today()
 empleadores_disp = sorted(df_emp["empleador"].dropna().unique())
-col_emp, col_d, col_h = st.columns([2, 2, 2], gap="medium")
+col_emp, col_d, col_h, col_fp = st.columns([2, 2, 2, 2], gap="medium")
 with col_emp:
     empleador_sel = st.selectbox("Empleador", options=empleadores_disp, index=0, key="empleador_a")
 with col_d:
     desde = st.date_input("Desde", value=hoy.replace(day=1), key="desde_a")
 with col_h:
     hasta = st.date_input("Hasta", value=hoy, key="hasta_a")
+with col_fp:
+    fecha_pago = st.date_input("Fecha de pago", value=hoy, key="fecha_pago_a")
 
 df_reg = pd.DataFrame(columns=["id","legajo","apenom","empleador","fecha_adelanto","monto","motivo"])
 try:
@@ -422,29 +414,63 @@ df_reg = df_reg[df_reg["empleador"] == empleador_sel]
 if df_reg.empty:
     st.info("No hay adelantos registrados para el período seleccionado.")
 else:
-    total_reg = int(df_reg["monto"].sum())
+    # Adjuntar CUIL y CBU del padrón (clave única legajo + empleador, evitando
+    # el legajo repetido entre empresas). Se prioriza la fila con CBU válido.
+    emp_lookup = df_emp[["legajo", "empleador", "cuil", "cbu"]].copy()
+    emp_lookup["legajo"] = emp_lookup["legajo"].astype(str).str.strip()
+    emp_lookup = (emp_lookup.sort_values("cbu", ascending=False)
+                            .drop_duplicates(subset=["legajo", "empleador"], keep="first"))
+
+    df_pago = df_reg.copy()
+    df_pago["legajo"] = df_pago["legajo"].astype(str).str.strip()
+    df_pago = df_pago.merge(emp_lookup, on=["legajo", "empleador"], how="left")
+    df_pago["cuil"] = df_pago["cuil"].fillna("")
+    df_pago["cbu"] = df_pago["cbu"].fillna("")
+
+    total_reg = int(df_pago["monto"].sum())
     total_fmt = f"$ {total_reg:,.0f}".replace(",",".")
     st.markdown(f"""
     <div class="download-meta">
-      <span class="pill"><span>{len(df_reg)}</span> registros</span>
+      <span class="pill"><span>{len(df_pago)}</span> registros</span>
       <span class="pill">Total <span>{total_fmt}</span></span>
     </div>
     """, unsafe_allow_html=True)
 
-    df_display = df_reg.rename(columns={
+    df_display = df_pago.rename(columns={
         "legajo":"Legajo","apenom":"Nombre","empleador":"Empleador",
-        "fecha_adelanto":"Fecha","monto":"Monto ($)","motivo":"Motivo",
+        "fecha_adelanto":"Fecha","monto":"Monto ($)","cuil":"CUIL","cbu":"CBU",
     })
     df_display["Monto ($)"] = df_display["Monto ($)"].apply(lambda x: f"$ {int(x):,.0f}".replace(",","."))
-    st.dataframe(df_display, use_container_width=True, hide_index=True)
+    df_display["CBU"] = df_display["CBU"].replace("", "⚠ falta")
+    df_display["CUIL"] = df_display["CUIL"].replace("", "⚠ falta")
+    st.dataframe(df_display[["Legajo","Nombre","Fecha","Monto ($)","CUIL","CBU"]],
+                 use_container_width=True, hide_index=True)
 
-    txt = _generar_txt(df_reg)
-    st.download_button(
-        "⬇  Descargar TXT",
-        data=txt.encode("utf-8"),
-        file_name=f"{slug_empleador(empleador_sel)}_{desde.strftime('%d-%m-%Y')}_a_{hasta.strftime('%d-%m-%Y')}.txt",
-        mime="text/plain",
-    )
+    # Aviso de datos faltantes (no bloquea: la fila se incluye con el campo vacío)
+    faltan = df_pago[(df_pago["cbu"] == "") | (df_pago["cuil"] == "")]
+    if not faltan.empty:
+        detalle = "\n".join(
+            f"- {r['apenom']} (legajo {r['legajo']}): "
+            + ", ".join(
+                ([] if r["cuil"] else ["sin CUIL"]) + ([] if r["cbu"] else ["sin CBU"])
+            )
+            for _, r in faltan.iterrows()
+        )
+        st.warning(
+            f"⚠ {len(faltan)} registro(s) sin CBU/CUIL válido en MasterBus. "
+            f"Se incluyen igual en el archivo con el campo vacío — corregilos en MasterBus:\n\n{detalle}"
+        )
+
+    if not santander.template_disponible():
+        st.error("No se encuentra el template del banco (templates/santander_pagos.xlsx).")
+    else:
+        xlsx = santander.generar_excel_santander(df_pago, fecha_pago)
+        st.download_button(
+            "⬇  Descargar Excel (Santander)",
+            data=xlsx,
+            file_name=f"{slug_empleador(empleador_sel)}_{desde.strftime('%d-%m-%Y')}_a_{hasta.strftime('%d-%m-%Y')}.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        )
 
 # ─── Sección eliminar ─────────────────────────────────────────
 if can_edit("adelantos"):

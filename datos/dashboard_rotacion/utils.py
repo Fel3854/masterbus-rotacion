@@ -1,6 +1,7 @@
 """Utilidades compartidas entre las páginas del dashboard."""
 
 import logging
+import re
 import requests
 import pandas as pd
 import streamlit as st
@@ -46,6 +47,23 @@ def get_supabase() -> Client:
     return create_client(url, key)
 
 
+def limpiar_cuil(s) -> str:
+    """Deja solo los dígitos del CUIL. '' si no quedan exactamente 11."""
+    d = re.sub(r"\D", "", str(s or ""))
+    return d if len(d) == 11 else ""
+
+
+def limpiar_cbu(s) -> str:
+    """Deja solo los dígitos del CBU. '' si no quedan exactamente 22.
+
+    El campo viene sucio en la API: basura al final ('...965.', '...082-'),
+    nombres de banco escritos en el campo ('SANTANDER', 'GALICIA') y largos
+    inválidos. Esos casos quedan en '' para avisarlos en la página.
+    """
+    d = re.sub(r"\D", "", str(s or ""))
+    return d if len(d) == 22 else ""
+
+
 def _parse_fecha(s):
     if not s or str(s).strip() in FECHAS_INVALIDAS:
         return None
@@ -79,11 +97,19 @@ def cargar_datos():
 
 
 def cargar_empleados_activos():
-    """Devuelve DataFrame con empleados activos del Grupo Master."""
+    """Devuelve DataFrame con empleados activos del Grupo Master.
+
+    Incluye 'cuil' y 'cbu' ya limpios (dígitos; '' si son inválidos) para la
+    exportación Santander de Adelantos. Las otras vistas ignoran esas columnas.
+    """
     df, _ = cargar_datos()
-    activos = df[df["activo"] == "1"][["legajo", "apenom", "empleador"]].copy()
+    cols = ["legajo", "apenom", "empleador"]
+    cols += [c for c in ("cuil", "cbu") if c in df.columns]
+    activos = df[df["activo"] == "1"][cols].copy()
     activos["legajo"] = activos["legajo"].astype(str).str.strip()
     activos["apenom"] = activos["apenom"].str.strip().str.upper()
+    activos["cuil"] = activos["cuil"].apply(limpiar_cuil) if "cuil" in activos.columns else ""
+    activos["cbu"] = activos["cbu"].apply(limpiar_cbu) if "cbu" in activos.columns else ""
     activos = activos.sort_values("apenom").reset_index(drop=True)
     return activos
 
