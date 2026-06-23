@@ -331,7 +331,8 @@ def _generar_txt(df: pd.DataFrame) -> str:
     for _, r in df.iterrows():
         legajo = int(str(r["legajo"]).strip())
         monto_str = f"{float(r['monto']):.2f}".replace(".", ",")
-        lines.append(f"{legajo:>10} {monto_str:>9}")
+        apenom = str(r.get("apenom", "") or "").strip()
+        lines.append(f"{legajo:>10} {monto_str:>9}  {apenom}")
     return "\n".join(lines)
 
 
