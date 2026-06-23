@@ -14,9 +14,10 @@ import streamlit as st
 
 # ─── Usuarios y permisos ─────────────────────────────────────
 USERS = {
-    "lu":     {"name": "Lu",     "edit_adelantos": True,  "edit_descuentos": True},
-    "victor": {"name": "Victor", "edit_adelantos": False, "edit_descuentos": True},
-    "flor":   {"name": "Flor",   "edit_adelantos": True,  "edit_descuentos": True},
+    "lu":      {"name": "Lu",      "edit_adelantos": True,  "edit_descuentos": True},
+    "victor":  {"name": "Victor",  "edit_adelantos": False, "edit_descuentos": True},
+    "flor":    {"name": "Flor",    "edit_adelantos": True,  "edit_descuentos": True},
+    "sueldos": {"name": "Sueldos", "edit_adelantos": False, "edit_descuentos": False},
 }
 
 COLOR_PRIMARY = "#ED5D3B"
