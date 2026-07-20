@@ -1,0 +1,78 @@
+name: Heartbeat Rotacion → Dashboard
+
+# Le avisa al Dashboard de Control (repo Fel3854/dashboard-control) que el batch de Rotacion
+# corrio, escribiendo heartbeats/rotacion.json. Asi "Rotacion" deja de figurar INACTIVO en el
+# panel y se pone OK (o CAIDO si el batch fallo). Corre en la nube: NO depende de ninguna Mac.
+#
+# Se dispara automaticamente cuando termina el workflow "Alerta Período de Prueba" (reporta OK
+# o CAIDO segun como haya salido esa corrida). Tambien se puede correr a mano (workflow_dispatch).
+#
+# Requisito (una sola vez): cargar el secret GH_TOKEN en este repo
+# (Settings → Secrets and variables → Actions → New repository secret):
+#   Nombre: GH_TOKEN
+#   Valor : un PAT fine-grained con permiso Contents: Read and write SOLO sobre
+#           el repo Fel3854/dashboard-control (el mismo que usa el heartbeat local).
+on:
+  workflow_run:
+    workflows: ["Alerta Período de Prueba"]
+    types: [completed]
+  workflow_dispatch:
+
+jobs:
+  heartbeat:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Reportar heartbeat al dashboard-control
+        env:
+          GH_TOKEN: ${{ secrets.GH_TOKEN }}
+          # OK si la corrida del batch salio bien; en disparo manual, OK por defecto.
+          OK: ${{ github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success' }}
+        run: |
+          python3 - <<'EOF'
+          import base64, json, os, sys, urllib.request, urllib.error
+          from datetime import datetime, timezone
+
+          token = os.environ.get("GH_TOKEN")
+          if not token:
+              print("Falta el secret GH_TOKEN: no se reporta el heartbeat (no se rompe nada).")
+              sys.exit(0)  # best-effort: nunca hace fallar la corrida
+
+          repo, branch, ruta = "Fel3854/dashboard-control", "main", "heartbeats/rotacion.json"
+          api = f"https://api.github.com/repos/{repo}/contents/{ruta}"
+          ok = os.environ.get("OK", "true").lower() == "true"
+
+          cuerpo = json.dumps({
+              "ultima_corrida": datetime.now(timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z"),
+              "ok": ok,
+          }, indent=2)
+
+          def req(method, url, payload=None):
+              data = json.dumps(payload).encode() if payload is not None else None
+              r = urllib.request.Request(url, data=data, method=method)
+              r.add_header("Authorization", f"Bearer {token}")
+              r.add_header("Accept", "application/vnd.github+json")
+              r.add_header("X-GitHub-Api-Version", "2022-11-28")
+              if data is not None:
+                  r.add_header("Content-Type", "application/json")
+              with urllib.request.urlopen(r) as resp:
+                  return json.loads(resp.read() or "{}")
+
+          # La Contents API exige el sha del archivo si ya existe.
+          sha = None
+          try:
+              sha = req("GET", f"{api}?ref={branch}").get("sha")
+          except urllib.error.HTTPError as e:
+              if e.code != 404:
+                  raise
+
+          payload = {
+              "message": f"heartbeat: rotacion {'OK' if ok else 'FAIL'} [skip ci]",
+              "content": base64.b64encode(cuerpo.encode()).decode(),
+              "branch": branch,
+          }
+          if sha:
+              payload["sha"] = sha
+
+          req("PUT", api, payload)
+          print(f"Heartbeat reportado al dashboard: ok={ok}")
+          EOF
