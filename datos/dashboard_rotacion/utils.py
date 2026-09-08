@@ -100,18 +100,63 @@ def cargar_empleados_activos():
     """Devuelve DataFrame con empleados activos del Grupo Master.
 
     Incluye 'cuil' y 'cbu' ya limpios (dígitos; '' si son inválidos) para la
-    exportación Santander de Adelantos. Las otras vistas ignoran esas columnas.
+    exportación Santander de Adelantos, y 'cargo' / 'str' (operación o base) /
+    'fecha_inicio' para la cola de pendientes de Seguimiento. Cada vista usa
+    solo las columnas que necesita y elige por nombre, así que sumar columnas
+    acá no afecta a las demás páginas.
     """
     df, _ = cargar_datos()
     cols = ["legajo", "apenom", "empleador"]
-    cols += [c for c in ("cuil", "cbu") if c in df.columns]
+    cols += [c for c in ("cuil", "cbu", "cargo", "str", "fecha_inicio") if c in df.columns]
     activos = df[df["activo"] == "1"][cols].copy()
     activos["legajo"] = activos["legajo"].astype(str).str.strip()
     activos["apenom"] = activos["apenom"].str.strip().str.upper()
     activos["cuil"] = activos["cuil"].apply(limpiar_cuil) if "cuil" in activos.columns else ""
     activos["cbu"] = activos["cbu"].apply(limpiar_cbu) if "cbu" in activos.columns else ""
+    if "str" in activos.columns:
+        activos["str"] = activos["str"].fillna("")
     activos = activos.sort_values("apenom").reset_index(drop=True)
     return activos
+
+
+def chart_base(**overrides):
+    """Tokens de diseño compartidos para los gráficos Plotly — branding MasterBus."""
+    base = dict(
+        paper_bgcolor="rgba(0,0,0,0)",
+        plot_bgcolor=COLOR_SURFACE,
+        font=dict(family="'Fira Sans', sans-serif", color=COLOR_MUTED, size=12),
+        xaxis=dict(showgrid=False, showline=True, zeroline=False,
+                   linecolor=COLOR_BORDER, tickfont=dict(color=COLOR_MUTED)),
+        yaxis=dict(showgrid=True, gridcolor="#E8E8E8", zeroline=False,
+                   linecolor=COLOR_BORDER, tickfont=dict(color=COLOR_MUTED),
+                   rangemode="tozero"),
+        hoverlabel=dict(bgcolor=COLOR_SURFACE, bordercolor=COLOR_BORDER,
+                        font=dict(family="'Fira Sans', sans-serif",
+                                  color=COLOR_TEXT, size=12)),
+        margin=dict(l=10, r=10, t=20, b=10),
+    )
+    base.update(overrides)
+    return base
+
+
+def delta_html(val, inverse=False, suffix="", decimals=0):
+    """Chip ▲/▼ de variación vs. período anterior.
+
+    `inverse=True` para métricas donde subir es malo (rotación, alertas).
+    """
+    if val is None:
+        return ""
+    if inverse:
+        color = "#D12F19" if val > 0 else "#15803D" if val < 0 else COLOR_MUTED
+    else:
+        color = "#15803D" if val > 0 else "#D12F19" if val < 0 else COLOR_MUTED
+    sign = "+" if val > 0 else ""
+    arrow = "▲" if val > 0 else "▼" if val < 0 else "—"
+    val_str = f"{val:,.{decimals}f}{suffix}"
+    return (
+        f'<div style="font-size:0.78rem;font-weight:600;color:{color};margin-top:8px;">'
+        f'{arrow} {sign}{val_str} vs período ant.</div>'
+    )
 
 
 def slug_empleador(nombre: str) -> str:
