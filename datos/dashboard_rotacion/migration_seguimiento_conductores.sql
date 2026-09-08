@@ -73,6 +73,31 @@ CREATE TABLE IF NOT EXISTS seguimiento_conductores (
     aspectos_mejorar  TEXT,
     compromisos       TEXT,
 
+    -- ── Observación del entrevistador por pregunta (1-20) ──
+    -- Nota interna del entrevistador, distinta del textual (voz del conductor);
+    -- confidencial igual que los textuales. En bases ya creadas se agregan con
+    -- ALTER TABLE ... ADD COLUMN IF NOT EXISTS pNN_obs text.
+    p01_obs  TEXT,
+    p02_obs  TEXT,
+    p03_obs  TEXT,
+    p04_obs  TEXT,
+    p05_obs  TEXT,
+    p06_obs  TEXT,
+    p07_obs  TEXT,
+    p08_obs  TEXT,
+    p09_obs  TEXT,
+    p10_obs  TEXT,
+    p11_obs  TEXT,
+    p12_obs  TEXT,
+    p13_obs  TEXT,
+    p14_obs  TEXT,
+    p15_obs  TEXT,
+    p16_obs  TEXT,
+    p17_obs  TEXT,
+    p18_obs  TEXT,
+    p19_obs  TEXT,
+    p20_obs  TEXT,
+
     -- Evita el duplicado por doble submit sin bloquear un seguimiento posterior
     -- del mismo conductor en otra fecha (la sección 8 pide "fecha de próximo
     -- seguimiento", o sea que las re-entrevistas están previstas).

@@ -350,6 +350,14 @@ div[data-testid="stRadio"] label:has(input:checked) p {{ color: #fff !important;
     font-size: 0.82rem; color: #555; font-style: italic; margin-top: 0.35rem;
     padding-left: 10px; border-left: 2px solid #e0e0e0;
 }}
+.det-obs {{
+    font-size: 0.82rem; color: #555; margin-top: 0.35rem;
+    padding-left: 10px; border-left: 2px solid {COLOR_PRIMARY}66;
+}}
+.det-obs span {{
+    font-weight: 700; color: {COLOR_PRIMARY}; font-size: 0.72rem;
+    text-transform: uppercase; letter-spacing: 0.03em; margin-right: 4px;
+}}
 </style>
 """, unsafe_allow_html=True)
 
@@ -429,9 +437,11 @@ def _bloques_html(secciones):
                         f'color:{it["color"]};border:1px solid {it["color"]}40;">'
                         f'{it["respuesta"]}</div>')
             txt = f'<div class="det-txt">"{it["textual"]}"</div>' if it["textual"] else ""
+            obs = (f'<div class="det-obs"><span>Obs.</span> {it["observacion"]}</div>'
+                   if it.get("observacion") else "")
             num = f'<div class="det-num">{it["etiqueta"]}.</div>' if it["etiqueta"] else ""
             out.append(f'<div class="det-item">{num}'
-                       f'<div class="det-q">{it["pregunta"]}{txt}</div>{resp}</div>')
+                       f'<div class="det-q">{it["pregunta"]}{txt}{obs}</div>{resp}</div>')
     return "".join(out)
 
 
@@ -701,7 +711,9 @@ tab_form, tab_carga, tab_ind = st.tabs(
 # TAB 1 — Nueva entrevista
 # ══════════════════════════════════════════════════════════════
 with tab_form:
-    col_form, col_pend = st.columns([3, 2], gap="large")
+    # El formulario ocupa todo el ancho (se quitó el panel «Pendientes de
+    # entrevista» que iba al costado).
+    col_form = st.container()
 
     with col_form:
         if not PUEDE_EDITAR:
@@ -763,6 +775,11 @@ with tab_form:
                                 placeholder="Detallar solo si corresponde"
                                 if p["tipo"] == "flag" else "Textual de la respuesta",
                             )
+                        # Observación del entrevistador, opcional, bajo cada pregunta.
+                        respuestas[p["cod"] + "_obs"] = st.text_input(
+                            "Observación", key=f"sg_{p['cod']}_obs_{seed}",
+                            placeholder="Observación del entrevistador (opcional)",
+                        )
 
                 _sec_head("7. Autopercepción del conductor")
                 st.caption("El conductor se evalúa a sí mismo en cada área.")
@@ -884,6 +901,8 @@ with tab_form:
                             if "texto_label" in p:
                                 txt = (respuestas.get(p["cod"] + "_texto") or "").strip()
                                 payload[p["cod"] + "_texto"] = txt or None
+                            obs = (respuestas.get(p["cod"] + "_obs") or "").strip()
+                            payload[p["cod"] + "_obs"] = obs or None
                         for a in sg.AUTOEVAL:
                             payload[a["cod"]] = sg.codigo(a, respuestas.get(a["cod"]))
 
@@ -904,44 +923,6 @@ with tab_form:
                                 f"{fecha_entrevista.strftime('%d/%m/%Y')}")
                             st.session_state["sg_form_seed"] = seed + 1
                             st.rerun()
-
-    # ── Cola de pendientes ──
-    with col_pend:
-        st.markdown('<p class="section-label">Pendientes de entrevista</p>', unsafe_allow_html=True)
-        pend = sg.cohorte_pendientes(df_emp, df_seg)
-        n_tiempo = int((pend["estado"] == "A tiempo").sum()) if not pend.empty else 0
-        n_venc = int((pend["estado"] == "Vencido").sum()) if not pend.empty else 0
-        st.markdown(f"""
-        <div class="kpi-grid">
-          <div class="kpi-card">
-            <div class="kpi-label">A tiempo</div>
-            <div class="kpi-value">{n_tiempo}</div>
-            <div class="kpi-sub">entre {sg.DIAS_OBJETIVO_MIN} y 90 días</div>
-          </div>
-          <div class="kpi-card">
-            <div class="kpi-label">Vencidos</div>
-            <div class="kpi-value">{n_venc}</div>
-            <div class="kpi-sub">más de 90 días</div>
-          </div>
-        </div>
-        """, unsafe_allow_html=True)
-
-        if pend.empty:
-            st.success("✓ No hay conductores pendientes de entrevista.")
-        else:
-            vista = pend.rename(columns={
-                "legajo": "Legajo", "apenom": "Nombre", "base": "Base",
-                "dias": "Días", "estado": "Estado",
-            })
-            st.dataframe(
-                vista[["Legajo", "Nombre", "Base", "Días", "Estado"]],
-                width="stretch", hide_index=True,
-                column_config={"Días": st.column_config.NumberColumn(
-                    "Días", help="Días desde el ingreso", format="%d")},
-            )
-            st.caption(
-                f"Conductores activos con entre {sg.DIAS_OBJETIVO_MIN} y "
-                f"{sg.DIAS_VENCIDO} días de antigüedad y sin entrevista cargada.")
 
 # ══════════════════════════════════════════════════════════════
 # TAB 2 — Entrevistas cargadas

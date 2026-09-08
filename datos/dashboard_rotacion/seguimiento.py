@@ -233,6 +233,11 @@ COLUMNAS_TEXTO = COD_TEXTOS + [
     "frases_destacadas", "fortalezas", "aspectos_mejorar", "compromisos",
 ]
 
+# Observación del entrevistador, una por cada pregunta numerada (1-20). Es una
+# nota interna del entrevistador (distinta del textual, que es la voz del
+# conductor); se trata como confidencial igual que los textuales.
+COD_OBS = [p["cod"] + "_obs" for p in PREGUNTAS]
+
 COLUMNAS_CABECERA = [
     "id", "legajo", "apenom", "empleador", "base", "cargo",
     "fecha_ingreso", "fecha_entrevista", "entrevistador",
@@ -250,6 +255,7 @@ def columnas_db():
     cols += [p["cod"] for p in PREGUNTAS]
     cols += COD_AUTO
     cols += COLUMNAS_TEXTO
+    cols += COD_OBS
     return cols
 
 
@@ -719,12 +725,16 @@ def detalle_entrevista(fila, incluir_textos=True):
             texto = ""
             if incluir_textos and "texto_label" in preg:
                 texto = fila.get(preg["cod"] + "_texto") or ""
+            obs = ""
+            if incluir_textos:
+                obs = fila.get(preg["cod"] + "_obs") or ""
             items.append({
                 "etiqueta": str(preg["n"]),
                 "pregunta": preg["texto"],
                 "respuesta": etiqueta(preg, valor) or "Sin responder",
                 "color": color_respuesta(preg, valor),
                 "textual": str(texto).strip(),
+                "observacion": str(obs).strip(),
             })
         secciones.append((f"{num}. {nombre.upper()}", items))
 
@@ -739,6 +749,7 @@ def detalle_entrevista(fila, incluir_textos=True):
             "respuesta": etiqueta(a, valor) or "Sin responder",
             "color": color_respuesta(a, valor),
             "textual": "",
+            "observacion": "",
         })
     secciones.append(("7. AUTOPERCEPCIÓN DEL CONDUCTOR", items))
 
@@ -753,7 +764,7 @@ def detalle_entrevista(fila, incluir_textos=True):
                 items.append({
                     "etiqueta": "", "pregunta": nombre,
                     "respuesta": "", "color": COLOR_BUENO,
-                    "textual": str(valor).strip(),
+                    "textual": str(valor).strip(), "observacion": "",
                 })
         if items:
             secciones.append(("8. CONCLUSIÓN", items))
@@ -835,6 +846,11 @@ def preparar_export(df, incluir_textos):
             else:
                 nombre = ETIQUETAS_EXPORT.get(col, col)
             out[nombre] = df[col]
+        # Observación del entrevistador por pregunta (también confidencial).
+        for p in PREGUNTAS:
+            col = p["cod"] + "_obs"
+            if col in df.columns:
+                out[f"{p['n']}. {p['corto']} — observación"] = df[col]
 
     # .map sobre DataFrame reemplaza al applymap deprecado en pandas 2.x
     return out.apply(lambda col: col.map(_limpiar_celda))
