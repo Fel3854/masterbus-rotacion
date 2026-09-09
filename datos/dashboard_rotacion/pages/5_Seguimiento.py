@@ -761,7 +761,7 @@ with tab_form:
             # Nunca se usa clear_on_submit=True: borraría 20 minutos de
             # transcripción si falla una validación.
             seed = st.session_state.setdefault("sg_form_seed", 0)
-            nombre_user = (current_user() or {}).get("name", "")
+            nombre_user = (current_user() or {}).get("nombre", "")
 
             with st.form("form_seguimiento", clear_on_submit=False):
                 empleado_sel = st.selectbox(

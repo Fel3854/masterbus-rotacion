@@ -49,6 +49,7 @@ MODULOS = {
     "descuentos":  "Descuentos",
     "seguimiento": "Seguimiento",
     "minutas":     "Minutas",
+    "usuarios":    "Usuarios",
     "sesion":      "Sesión",
 }
 
@@ -80,7 +81,7 @@ def registrar(modulo, accion, detalle="", registro_id=None, datos=None):
         fila = {
             "fecha": datetime.now(timezone.utc).isoformat(),
             "usuario": usuario,
-            "nombre": u.get("name") or usuario,
+            "nombre": u.get("nombre") or usuario,
             "modulo": modulo,
             "accion": accion,
             "detalle": (detalle or "")[:500],
@@ -92,11 +93,15 @@ def registrar(modulo, accion, detalle="", registro_id=None, datos=None):
         pass
 
 
-def registrar_login(usuario, ok):
+def registrar_login(usuario, ok, motivo=""):
     """Ingreso o intento fallido.
 
     Va aparte de `registrar()` porque en el intento fallido todavía no hay
     sesión: el usuario tecleado no es un usuario logueado, es sólo un dato.
+
+    El `motivo` (usuario inexistente / desactivado / contraseña incorrecta) se
+    guarda acá aunque en pantalla se muestre siempre el mismo mensaje: al que
+    intenta entrar no hay que darle pistas, pero al que audita sí.
     """
     try:
         fila = {
@@ -105,7 +110,7 @@ def registrar_login(usuario, ok):
             "nombre": None,
             "modulo": "sesion",
             "accion": "login" if ok else "login_fallido",
-            "detalle": "Ingreso correcto" if ok else "Usuario o contraseña incorrectos",
+            "detalle": "Ingreso correcto" if ok else f"Rechazado: {motivo or 'sin detalle'}",
         }
         get_supabase().table(TABLA).insert(fila).execute()
     except Exception:  # noqa: BLE001

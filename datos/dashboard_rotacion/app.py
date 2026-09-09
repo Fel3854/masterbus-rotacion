@@ -4,7 +4,7 @@
 import logging
 import streamlit as st
 
-from auth import require_login, current_user, logout, puede_ver_auditoria
+from auth import require_login, current_user, logout, es_admin
 
 logging.basicConfig(
     level=logging.WARNING,
@@ -29,11 +29,13 @@ paginas = [
     st.Page("pages/6_Minutas.py",                   title="Minutas Reunión",     icon="📝"),
 ]
 
-# La auditoría sólo aparece en el menú de quien puede verla. Esconderla del menú
-# no alcanza como control: la propia página vuelve a chequear el permiso.
-if puede_ver_auditoria():
+# Auditoría y Usuarios son del admin. Esconderlas del menú no alcanza como
+# control: cada página vuelve a chequear el permiso por su cuenta.
+if es_admin():
     paginas.append(
         st.Page("pages/7_Auditoria.py",             title="Auditoría",           icon="🔎"))
+    paginas.append(
+        st.Page("pages/8_Usuarios.py",              title="Usuarios",            icon="👥"))
 
 paginas.append(
     st.Page("pages/4_Manual_de_Usuario.py",         title="Manual de Usuario",   icon="📖"))
@@ -42,7 +44,7 @@ pg = st.navigation(paginas)
 
 # ─── Usuario activo + cerrar sesión (en todas las páginas) ───
 with st.sidebar:
-    st.caption(f"Sesión: {(current_user() or {}).get('name', '')}")
+    st.caption(f"Sesión: {(current_user() or {}).get('nombre', '')}")
     if st.button("Cerrar sesión", use_container_width=True):
         logout()
         st.rerun()

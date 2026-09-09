@@ -14,7 +14,7 @@ Al ingresar, verás un menú lateral (a la izquierda) que te permitirá navegar 
 4. **Vencimientos**
 5. **Seguimiento** (entrevistas de conductores)
 6. **Minutas Reunión** (temas y acciones de RRHH)
-7. **Auditoría** (registro de movimientos — sólo visible para quien tiene ese permiso)
+7. **Auditoría** y **Usuarios** (sólo visibles para el administrador)
 
 ---
 
@@ -88,7 +88,7 @@ Esta pantalla te muestra listados de personal o recursos que tienen documentaci�
 
 Este módulo digitaliza la **entrevista de seguimiento del 2° mes**: la charla individual que RRHH tiene con cada conductor nuevo a los dos meses de haber ingresado. El objetivo no es evaluarlo, sino detectar a tiempo problemas de adaptación, de seguridad o de clima, antes de que se transformen en una baja.
 
-**Quién puede cargar entrevistas:** Lu, Flor y el usuario genérico `rrhh` (credencial compartida del equipo). El resto de los usuarios —incluidas las gerencias, `maxi` (Operaciones) y `cigna` (Seguridad Vial)— ve los indicadores, los puntajes y la cola de pendientes, pero **no** las respuestas textuales: el conductor las da bajo promesa de confidencialidad, así que las citas quedan reservadas a quien realiza la entrevista.
+**Quién puede cargar entrevistas:** los usuarios con el permiso de *Seguimiento* activado (se administra desde la pestaña Usuarios). El resto —incluidas las gerencias— ve los indicadores, los puntajes y la cola de pendientes, pero **no** las respuestas textuales: el conductor las da bajo promesa de confidencialidad, así que las citas quedan reservadas a quien realiza la entrevista.
 
 La pantalla tiene tres pestañas.
 
@@ -143,7 +143,7 @@ Todo lo de esta pestaña es agregado: **no aparecen nombres**.
 
 ## 6. Auditoría: quién hizo qué
 
-Todo movimiento que cambia datos queda registrado. La pestaña **Auditoría** muestra ese registro y sólo la ven los usuarios habilitados (hoy: Lu y Flor).
+Todo movimiento que cambia datos queda registrado. La pestaña **Auditoría** muestra ese registro y sólo la ve el **administrador**.
 
 ### Qué se registra
 | Acción | Cuándo se anota |
@@ -152,6 +152,7 @@ Todo movimiento que cambia datos queda registrado. La pestaña **Auditoría** mu
 | **Baja** | Se elimina cualquiera de esos registros |
 | **Cambio** | Se edita una minuta o se cambia su estado |
 | **Exportación** | Se descarga el Excel del Santander (lleva CUIL y CBU) o entrevistas de Seguimiento |
+| **Usuarios** | Se crea un usuario, se le cambian los permisos, se le resetea la contraseña o se lo desactiva |
 | **Lectura sensible** | Alguien abre una entrevista y ve las respuestas textuales del conductor |
 | **Ingreso / Salida** | Login, logout e intentos de login fallidos |
 
@@ -165,7 +166,36 @@ De cada movimiento queda: fecha y hora, usuario, módulo, acción y un detalle l
 - El botón de descarga arma un Excel con lo que estés viendo filtrado.
 
 ### El registro no se puede borrar desde la app
-La tabla acepta que se agreguen movimientos y que se lean, pero **no** que se editen ni se eliminen — ni siquiera por quien tiene permiso de ver la auditoría. Un registro de control que el propio auditado puede borrar no controla nada. Para corregir o purgar el historial hay que entrar al panel de Supabase con la clave de administrador.
+La tabla acepta que se agreguen movimientos y que se lean, pero **no** que se editen ni se eliminen — ni siquiera por el administrador. Un registro de control que el propio auditado puede borrar no controla nada. Para corregir o purgar el historial hay que entrar al panel de Supabase con la clave de administrador.
+
+---
+
+## 7. Usuarios: altas, permisos y contraseñas
+
+La pestaña **Usuarios** es del administrador. Desde ahí se da de alta a alguien nuevo, se le cambian los permisos o se le resetea la contraseña, sin tocar el código ni pedirle nada a nadie.
+
+### Cómo funcionan los permisos
+Hay una regla general y dos excepciones:
+
+- **Todos ven todas las secciones.** Los permisos sólo habilitan *cargar, editar y eliminar*.
+- **Excepción 1:** el permiso de *Seguimiento* además habilita ver las respuestas textuales de las entrevistas, que son confidenciales. Dárselo a alguien es dejarlo leer lo que el conductor dijo bajo promesa de confidencialidad.
+- **Excepción 2:** *Administrador* es el único permiso de lectura. Habilita Auditoría y Usuarios, y **no** habilita cargar datos: administrar y operar se mantienen separados a propósito.
+
+### Dar de alta a alguien
+1. Pestaña **Nuevo usuario**.
+2. **Usuario**: con lo que va a entrar (minúsculas, sin espacios). **Nombre visible**: el que aparece en la sesión y en la auditoría.
+3. **Contraseña provisoria**: se la pasás por otro medio (WhatsApp, en persona). No la vas a poder ver de nuevo.
+4. Tildás los permisos que necesita y **Crear usuario**.
+
+En su primer ingreso, la app le va a exigir que cambie esa contraseña por una que **sólo él conozca**, y no lo deja entrar a nada hasta que lo haga. Lo mismo pasa cada vez que le reseteás la clave.
+
+### Contraseñas
+Se guardan **hasheadas**: ni el administrador puede ver la contraseña de otro. Si alguien se la olvida, no se recupera — se resetea desde el botón *Resetear contraseña* y la persona elige una nueva al entrar.
+
+### Bajas
+Un usuario **no se borra, se desactiva**. Deja de poder entrar, pero su historial en la auditoría sigue siendo legible: si se borrara la ficha, los movimientos viejos quedarían firmados por un fantasma. Se puede reactivar cuando haga falta.
+
+La app tampoco te deja **quitarte el admin a vos mismo ni desactivar al último administrador activo**: si no queda ninguno, la administración de usuarios se vuelve inaccesible desde la app y hay que entrar a Supabase a mano.
 
 ---
 

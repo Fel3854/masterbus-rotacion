@@ -253,7 +253,7 @@ def _render_form() -> None:
         payload = mn.construir_payload(
             fecha=f_fecha, tema=f_tema, descripcion=f_desc, responsable=f_resp,
             fecha_limite=f_lim, estado=f_estado,
-            registrado_por=(current_user() or {}).get("name", ""),
+            registrado_por=(current_user() or {}).get("nombre", ""),
         )
         try:
             _guardar(payload)

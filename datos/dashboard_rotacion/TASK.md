@@ -80,8 +80,36 @@ Se abre en el navegador en `http://localhost:8501`
 | Vencimientos | Control de documentación y habilitaciones próximas a vencer |
 | **Seguimiento** | **Entrevista de seguimiento del 2° mes de cada conductor: carga tabulada, cola de pendientes e indicadores de adaptación** |
 | Minutas Reunión | Temas y acciones de RRHH con estado y fecha límite |
-| Auditoría | Registro de movimientos de los usuarios (`auditoria.py`). Permiso `ver_auditoria`; tabla append-only |
+| Auditoría | Registro de movimientos de los usuarios (`auditoria.py`). Sólo admin; tabla append-only |
+| Usuarios | Alta, permisos y contraseñas (`usuarios.py`). Sólo admin |
 | Manual de Usuario | Renderiza `automatizaciones/docs/manual_usuario.md` |
+
+### Usuarios y autenticación
+
+`usuarios.py` + `pages/8_Usuarios.py` + `migration_usuarios.sql`.
+
+Los usuarios dejaron de ser el dict `USERS` de `auth.py` y viven en la tabla
+`usuarios`: un admin no puede editar el código desde la app, así que para dar de
+alta a alguien sin tocar el repo tienen que ser datos. `auth.current_user()` lee
+esa tabla con una caché de 30 s (TTL corto a propósito: quitarle un permiso a
+alguien tiene que surtir efecto rápido).
+
+Contraseñas hasheadas con PBKDF2-HMAC-SHA256, salt por usuario, 400k
+iteraciones, formato `pbkdf2_sha256$iter$salt$hash`. Stdlib a propósito: sumar
+bcrypt/argon2 metería una dependencia compilada al deploy para proteger siete
+cuentas internas. `usuarios.COLUMNAS` **excluye** `password_hash`; sólo se pide
+al validar un login.
+
+Invariantes con test:
+- `es_admin` no arrastra permisos de edición (administrar ≠ operar).
+- La pantalla no deja quitar ni desactivar al último admin activo
+  (`otros_admins_activos`): sin admin, la administración queda inaccesible.
+- Los usuarios se desactivan, no se borran: la auditoría los referencia.
+
+Ojo: `_signing_key()` ya NO deriva de `st.secrets["passwords"]` (esa sección
+quedó obsoleta). Usa `AUTH_SECRET` o, en su defecto, `SUPABASE_KEY`, y **falla
+fuerte** si no hay ninguno: con la llave vacía cualquiera se firmaría una cookie
+de admin.
 
 ### Auditoría
 
@@ -90,7 +118,7 @@ Se abre en el navegador en `http://localhost:8501`
 `auditoria.registrar(modulo, accion, detalle, registro_id, datos)` se llama
 DESPUÉS de cada escritura y nunca lanza excepción: si el log falla, la acción
 del usuario ya se hizo. Puntos instrumentados: altas/bajas/cambios de los cuatro
-módulos, exportaciones sensibles (Santander con CUIL/CBU, entrevistas con
+módulos, la administración de usuarios, exportaciones sensibles (Santander con CUIL/CBU, entrevistas con
 textuales), apertura de una entrevista con permiso de textuales, y login /
 logout / login fallido.
 
