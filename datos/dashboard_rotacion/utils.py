@@ -197,16 +197,25 @@ def inyectar_css_base():
     .stApp {{ background-color: {COLOR_BG}; }}
 
     .stButton > button {{
-        background: #3a3a3a;
-        color: #fff;
-        border: none;
-        border-radius: 6px;
+        background: {COLOR_SURFACE};
+        color: {COLOR_TEXT};
+        border: 1.5px solid {COLOR_BORDER};
+        border-radius: 8px;
         font-family: 'Fira Sans', sans-serif;
         font-weight: 600;
         padding: 0.45rem 1.2rem;
-        transition: background 0.2s;
+        transition: all 0.18s ease;
     }}
-    .stButton > button:hover {{ background: {COLOR_PRIMARY}; }}
+    .stButton > button:hover {{
+        background: {COLOR_PRIMARY};
+        color: #fff;
+        border-color: {COLOR_PRIMARY};
+    }}
+    .stButton > button:active {{
+        background: {COLOR_DANGER};
+        border-color: {COLOR_DANGER};
+        color: #fff;
+    }}
 
     .stDownloadButton > button {{
         background: {COLOR_PRIMARY};

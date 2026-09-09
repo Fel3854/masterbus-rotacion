@@ -26,6 +26,7 @@ pg = st.navigation([
     st.Page("pages/2_Descuentos.py",                title="Descuentos",          icon="📋"),
     st.Page("pages/3_Vencimientos.py",              title="Vencimientos",        icon="⏳"),
     st.Page("pages/5_Seguimiento.py",               title="Seguimiento",         icon="🧭"),
+    st.Page("pages/6_Minutas.py",                   title="Minutas Reunión",     icon="📝"),
     st.Page("pages/4_Manual_de_Usuario.py",         title="Manual de Usuario",   icon="📖"),
 ])
 

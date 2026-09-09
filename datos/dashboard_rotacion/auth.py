@@ -14,10 +14,10 @@ import streamlit as st
 
 # ─── Usuarios y permisos ─────────────────────────────────────
 USERS = {
-    "lu":      {"name": "Lu",      "edit_adelantos": True,  "edit_descuentos": True,  "edit_seguimiento": True},
-    "victor":  {"name": "Victor",  "edit_adelantos": False, "edit_descuentos": True,  "edit_seguimiento": False},
-    "flor":    {"name": "Flor",    "edit_adelantos": True,  "edit_descuentos": True,  "edit_seguimiento": True},
-    "sueldos": {"name": "Sueldos", "edit_adelantos": False, "edit_descuentos": False, "edit_seguimiento": False},
+    "lu":      {"name": "Lu",      "edit_adelantos": True,  "edit_descuentos": True,  "edit_seguimiento": True,  "edit_minutas": True},
+    "victor":  {"name": "Victor",  "edit_adelantos": False, "edit_descuentos": True,  "edit_seguimiento": False, "edit_minutas": False},
+    "flor":    {"name": "Flor",    "edit_adelantos": True,  "edit_descuentos": True,  "edit_seguimiento": True,  "edit_minutas": True},
+    "sueldos": {"name": "Sueldos", "edit_adelantos": False, "edit_descuentos": False, "edit_seguimiento": False, "edit_minutas": False},
 }
 
 COLOR_PRIMARY = "#ED5D3B"
@@ -92,7 +92,7 @@ def current_user() -> dict | None:
 def can_edit(section: str) -> bool:
     """True si el usuario puede editar la sección.
 
-    Secciones: 'adelantos' | 'descuentos' | 'seguimiento'.
+    Secciones: 'adelantos' | 'descuentos' | 'seguimiento' | 'minutas'.
     Para sumar un usuario a una sección alcanza con poner su flag en True arriba.
     En Seguimiento este permiso además habilita ver las respuestas textuales
     (son confidenciales: el conductor las da bajo promesa de confidencialidad).
