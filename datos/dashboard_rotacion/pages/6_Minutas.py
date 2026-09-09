@@ -11,6 +11,7 @@ import streamlit as st
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 from auth import can_edit, current_user  # noqa: E402
 from utils import inyectar_css_base, get_supabase  # noqa: E402
+import auditoria
 import minutas as mn  # noqa: E402
 
 _esc = html.escape
@@ -77,14 +78,20 @@ def _leer() -> pd.DataFrame:
 
 def _guardar(payload: dict) -> None:
     get_supabase().table(mn.TABLA).insert(payload).execute()
+    auditoria.registrar("minutas", "alta", str(payload.get("tema") or "")[:200],
+                        datos={"responsable": payload.get("responsable"),
+                               "estado": payload.get("estado")})
 
 
-def _actualizar(record_id: str, cambios: dict) -> None:
+def _actualizar(record_id: str, cambios: dict, detalle: str = "") -> None:
     get_supabase().table(mn.TABLA).update(cambios).eq("id", record_id).execute()
+    auditoria.registrar("minutas", "cambio", detalle, registro_id=record_id,
+                        datos={"campos": sorted(cambios)})
 
 
-def _eliminar(record_id: str) -> None:
+def _eliminar(record_id: str, detalle: str = "") -> None:
     get_supabase().table(mn.TABLA).delete().eq("id", record_id).execute()
+    auditoria.registrar("minutas", "baja", detalle, registro_id=record_id)
 
 
 # ─── Utilidades de formato ────────────────────────────────────
@@ -100,12 +107,12 @@ def _as_date(d, default=None):
 
 
 # ─── Callbacks de edición ─────────────────────────────────────
-def _cambiar_estado(rid: str) -> None:
+def _cambiar_estado(rid: str, tema: str = "") -> None:
     nuevo = st.session_state.get(f"est_{rid}")
     if not nuevo:
         return
     try:
-        _actualizar(rid, {"estado": nuevo})
+        _actualizar(rid, {"estado": nuevo}, f"{tema} → estado «{nuevo}»".strip(" →"))
         _leer.clear()
         st.toast(f"Estado → {nuevo}", icon="✅")
     except Exception as e:  # noqa: BLE001
@@ -148,7 +155,9 @@ def _render_item(fila, puede_editar: bool) -> None:
         with c_est:
             st.selectbox(
                 "Estado", mn.ESTADOS, index=mn.ESTADOS.index(estado),
-                key=f"est_{rid}", on_change=_cambiar_estado, args=(rid,),
+                key=f"est_{rid}", on_change=_cambiar_estado,
+                # el `tema` de arriba viene escapado para HTML: al log va el crudo
+                args=(rid, str(fila.get("tema") or "").strip()),
                 label_visibility="collapsed",
             )
 
@@ -184,7 +193,7 @@ def _render_item(fila, puede_editar: bool) -> None:
                             "descripcion": (e_desc.strip() or None),
                             "responsable": (e_resp.strip() or None),
                             "fecha_limite": e_lim.isoformat() if e_lim else None,
-                        })
+                        }, f"Editó «{e_tema.strip()}»")
                         _leer.clear()
                         st.toast("Minuta actualizada.", icon="✅")
                         st.rerun()
@@ -198,7 +207,7 @@ def _render_item(fila, puede_editar: bool) -> None:
                 d1, d2 = st.columns(2)
                 if d1.button("Sí, eliminar", key=f"yes_{rid}", use_container_width=True):
                     try:
-                        _eliminar(rid)
+                        _eliminar(rid, str(fila.get("tema") or "")[:200])
                         _leer.clear()
                         st.session_state.pop(del_key, None)
                         st.toast("Minuta eliminada.", icon="🗑️")

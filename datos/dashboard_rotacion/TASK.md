@@ -79,13 +79,34 @@ Se abre en el navegador en `http://localhost:8501`
 | Descuentos | Alta de descuentos con cuotas + exportación TXT para liquidación |
 | Vencimientos | Control de documentación y habilitaciones próximas a vencer |
 | **Seguimiento** | **Entrevista de seguimiento del 2° mes de cada conductor: carga tabulada, cola de pendientes e indicadores de adaptación** |
+| Minutas Reunión | Temas y acciones de RRHH con estado y fecha límite |
+| Auditoría | Registro de movimientos de los usuarios (`auditoria.py`). Permiso `ver_auditoria`; tabla append-only |
 | Manual de Usuario | Renderiza `automatizaciones/docs/manual_usuario.md` |
+
+### Auditoría
+
+`auditoria.py` + `pages/7_Auditoria.py` + `migration_auditoria.sql`.
+
+`auditoria.registrar(modulo, accion, detalle, registro_id, datos)` se llama
+DESPUÉS de cada escritura y nunca lanza excepción: si el log falla, la acción
+del usuario ya se hizo. Puntos instrumentados: altas/bajas/cambios de los cuatro
+módulos, exportaciones sensibles (Santander con CUIL/CBU, entrevistas con
+textuales), apertura de una entrevista con permiso de textuales, y login /
+logout / login fallido.
+
+Dos invariantes que tienen test:
+- El log **no** guarda respuestas de entrevistas, sólo que alguien las abrió.
+- La tabla es **append-only**: las policies son `FOR INSERT` y `FOR SELECT`, no
+  hay `FOR ALL`. Corregir el historial exige la service key desde Supabase.
+
+Ojo con el volumen: la apertura de la vista ampliada se audita al SETEAR
+`ver_id_sg`, no al renderizar — la vista se repinta en cada rerun.
 
 ### Seguimiento de Conductores
 
 Digitaliza el formulario de entrevista del 2° mes (`seguimiento_Conductor_2do_Mes.xlsx`).
 
-- **Tabulación**: cada una de las 20 preguntas abiertas tiene una respuesta cerrada codificada además del textual. 13 escalas 1-4, 2 flags Sí/No y 5 categorías. El catálogo `PREGUNTAS` en `seguimiento.py` es la única fuente de verdad: maneja el render del formulario, el insert y las métricas.
+- **Tabulación**: cada una de las 18 preguntas abiertas tiene una respuesta cerrada codificada además del textual. 11 escalas 1-4, 2 flags Sí/No y 5 categorías. El catálogo `PREGUNTAS` en `seguimiento.py` es la única fuente de verdad: maneja el render del formulario, el insert y las métricas.
 - **Escala**: Mala=1 · Regular=2 · Buena=3 · Muy buena=4 (la misma que traía la validación del xlsx). Los índices se normalizan a 0-100 con `(promedio − 1) / 3 × 100`; **67 equivale a responder "Buena" en todo** — con escala de 4 puntos no hay punto medio, así que 50 no es neutro.
 - **Dimensiones ≠ secciones**: las secciones 1-6 ordenan el formulario; las dimensiones agrupan para los índices. La pregunta 6 se muestra en la sección 2 pero indexa en *Vínculos* (mide lo mismo que la 14). Las preguntas 8 y 20 no forman índice: un promedio de un solo ítem es la pregunta con decimales.
 - **Permisos**: `edit_seguimiento` en `auth.py` (hoy Lu y Flor). Además de habilitar la carga, **gatea la lectura de las respuestas textuales**, que son confidenciales.

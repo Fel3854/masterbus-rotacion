@@ -1,11 +1,16 @@
 """Autenticación y permisos — usuarios de configuración fija.
 
-Los 3 usuarios y sus permisos de edición se definen acá (config fija).
+Los usuarios y sus permisos de edición se definen acá (config fija).
 Las contraseñas NO viven en el código: se leen de `st.secrets["passwords"]`
 (archivo .streamlit/secrets.toml, que no se versiona).
 
 Regla de permisos: todos VEN todas las secciones. Los flags `edit_*`
 controlan únicamente la EDICIÓN (registrar / eliminar) por sección.
+
+Excepción a esa regla: en Seguimiento, `edit_seguimiento` además habilita LEER
+las respuestas textuales, que son confidenciales. Por eso las gerencias entran
+con el flag en False: ven los índices, los cortes y las alertas, pero no el
+textual crudo que el conductor dio bajo promesa de confidencialidad.
 """
 
 from __future__ import annotations
@@ -16,12 +21,25 @@ import time
 
 import streamlit as st
 
+import auditoria
+
 # ─── Usuarios y permisos ─────────────────────────────────────
 USERS = {
-    "lu":      {"name": "Lu",      "edit_adelantos": True,  "edit_descuentos": True,  "edit_seguimiento": True,  "edit_minutas": True},
+    "lu":      {"name": "Lu",      "edit_adelantos": True,  "edit_descuentos": True,  "edit_seguimiento": True,  "edit_minutas": True,  "ver_auditoria": True},
     "victor":  {"name": "Victor",  "edit_adelantos": False, "edit_descuentos": True,  "edit_seguimiento": False, "edit_minutas": False},
-    "flor":    {"name": "Flor",    "edit_adelantos": True,  "edit_descuentos": True,  "edit_seguimiento": True,  "edit_minutas": True},
+    "flor":    {"name": "Flor",    "edit_adelantos": True,  "edit_descuentos": True,  "edit_seguimiento": True,  "edit_minutas": True,  "ver_auditoria": True},
     "sueldos": {"name": "Sueldos", "edit_adelantos": False, "edit_descuentos": False, "edit_seguimiento": False, "edit_minutas": False},
+
+    # Gerencias: perfil de lectura. Miran indicadores, no cargan ni editan.
+    "maxi":    {"name": "Maximiliano de Peón — Gerente de Operaciones",
+                "edit_adelantos": False, "edit_descuentos": False, "edit_seguimiento": False, "edit_minutas": False},
+    "cigna":   {"name": "Juan Cigna — Gerente de Seguridad Vial",
+                "edit_adelantos": False, "edit_descuentos": False, "edit_seguimiento": False, "edit_minutas": False},
+
+    # Usuario genérico del equipo de RRHH (credencial compartida). Carga
+    # entrevistas y minutas; no toca plata (adelantos ni descuentos).
+    "rrhh":    {"name": "RRHH", "edit_adelantos": False, "edit_descuentos": False,
+                "edit_seguimiento": True, "edit_minutas": True},
 }
 
 COLOR_PRIMARY = "#ED5D3B"
@@ -167,7 +185,11 @@ def _render_login() -> None:
             submitted = st.form_submit_button("Ingresar", use_container_width=True)
 
         if submitted:
-            if _valid(username, password):
+            ok = _valid(username, password)
+            # Se audita el intento, salga bien o mal: una racha de fallidos
+            # contra un usuario es justamente lo que un control debe mostrar.
+            auditoria.registrar_login(username, ok)
+            if ok:
                 st.session_state["auth_user"] = username
                 # Se escribe la cookie en el próximo run (ver require_login),
                 # no acá: un st.rerun() inmediato cortaría el JS del componente.
@@ -215,6 +237,16 @@ def current_user() -> dict | None:
     return USERS.get(st.session_state.get("auth_user", ""))
 
 
+def puede_ver_auditoria() -> bool:
+    """True si el usuario puede ver el registro de movimientos.
+
+    Es un permiso aparte de los `edit_*`: la auditoría no se edita, se lee, y
+    quien la lee ve la actividad de todos los demás. Arranca sólo para Lu y Flor.
+    """
+    u = current_user()
+    return bool(u and u.get("ver_auditoria"))
+
+
 def can_edit(section: str) -> bool:
     """True si el usuario puede editar la sección.
 
@@ -233,5 +265,6 @@ def logout() -> None:
     El borrado real de la cookie lo hace require_login() en el run siguiente
     (tras el st.rerun() del botón), para que el componente alcance a correr.
     """
+    auditoria.registrar("sesion", "logout", "Cerró sesión")
     st.session_state.pop("auth_user", None)
     st.session_state["_auth_clear_cookie"] = True

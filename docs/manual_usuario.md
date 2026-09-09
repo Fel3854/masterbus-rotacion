@@ -1,6 +1,6 @@
 # Manual de Usuario: Plataforma de RRHH - Grupo Master
 
-Este manual está diseñado para explicarte paso a paso cómo utilizar el **Dashboard de Rotación y Gestión de Novedades (Adelantos, Descuentos y Vencimientos)**. La herramienta está pensada para el uso intensivo (*heavy user*) del departamento de Recursos Humanos, centralizando la información en un solo lugar.
+Este manual está diseñado para explicarte paso a paso cómo utilizar el **Dashboard de Rotación y Gestión de Novedades (Adelantos, Descuentos, Vencimientos y Seguimiento de Conductores)**. La herramienta está pensada para el uso intensivo (*heavy user*) del departamento de Recursos Humanos, centralizando la información en un solo lugar.
 
 ---
 
@@ -12,6 +12,9 @@ Al ingresar, verás un menú lateral (a la izquierda) que te permitirá navegar 
 2. **Adelantos de Sueldo**
 3. **Descuentos**
 4. **Vencimientos**
+5. **Seguimiento** (entrevistas de conductores)
+6. **Minutas Reunión** (temas y acciones de RRHH)
+7. **Auditoría** (registro de movimientos — sólo visible para quien tiene ese permiso)
 
 ---
 
@@ -78,6 +81,91 @@ Si cargaste un monto mal o te equivocaste de empleado:
 Esta pantalla te muestra listados de personal o recursos que tienen documentación o habilitaciones próximas a vencer. 
 - Utiliza la tabla en pantalla para ordenar (haciendo clic en el encabezado de las columnas) y ver quiénes requieren atención inmediata (color rojo/amarillo según cercanía).
 - Es una herramienta de control y consulta diaria para que RRHH pueda anticiparse y notificar a los empleados.
+
+---
+
+## 5. Flujo de Trabajo 4: Seguimiento de Conductores
+
+Este módulo digitaliza la **entrevista de seguimiento del 2° mes**: la charla individual que RRHH tiene con cada conductor nuevo a los dos meses de haber ingresado. El objetivo no es evaluarlo, sino detectar a tiempo problemas de adaptación, de seguridad o de clima, antes de que se transformen en una baja.
+
+**Quién puede cargar entrevistas:** Lu, Flor y el usuario genérico `rrhh` (credencial compartida del equipo). El resto de los usuarios —incluidas las gerencias, `maxi` (Operaciones) y `cigna` (Seguridad Vial)— ve los indicadores, los puntajes y la cola de pendientes, pero **no** las respuestas textuales: el conductor las da bajo promesa de confidencialidad, así que las citas quedan reservadas a quien realiza la entrevista.
+
+La pantalla tiene tres pestañas.
+
+### Pestaña 1: Nueva entrevista
+
+A la izquierda está el formulario; a la derecha, **la cola de pendientes**.
+
+1. **Conductor**: escribí nombre, apellido o legajo. Solo aparecen conductores activos.
+2. **Fecha de la entrevista** y **Entrevistador** (se completa solo con tu usuario).
+3. **Las 18 preguntas**, agrupadas en las 6 secciones del formulario en papel. Cada una tiene:
+   - Una **respuesta cerrada** (los botones tipo píldora): es la que se mide. Ninguna viene preseleccionada a propósito, para que no queden respuestas puestas por descuido.
+   - En algunas, un campo de **textual** para registrar lo que dijo el conductor con sus palabras.
+4. **Sección 7 – Autopercepción**: el conductor se evalúa a sí mismo en las 4 áreas (Operaciones, Seguridad Vial, RRHH y Mantenimiento).
+5. **Sección 8 – Conclusión**: fortalezas, aspectos a mejorar, compromisos y fecha del próximo seguimiento.
+
+**Importante**: las 20 respuestas cerradas y las 4 de autopercepción son obligatorias — son las que permiten medir. Los textuales son opcionales, salvo en las preguntas 9 y 16: si ahí respondiste "Sí", tenés que detallar cuál es el problema.
+
+Si te falta alguna respuesta, el sistema te avisa **todas juntas** en un solo mensaje y **no se pierde nada de lo que ya cargaste**. Podés completar lo que falta y volver a enviar.
+
+**Cola de pendientes**: lista los conductores activos que ya tienen entre 45 y 120 días de antigüedad y todavía no tienen entrevista cargada. Los que pasaron los 90 días figuran como *Vencidos*. Es la lista de trabajo del mes.
+
+### Pestaña 2: Entrevistas cargadas
+
+Primero se muestran las **alertas**, porque son lo más importante de esta pantalla. Una entrevista queda marcada cuando:
+
+- El conductor dice que hay una **norma de seguridad difícil de cumplir** (pregunta 9).
+- El conductor dice que hay una **situación del ambiente laboral que lo incomoda** (pregunta 16).
+- **No recomendaría** la empresa (pregunta 20).
+- **No recibió** capacitación de Seguridad Vial (pregunta 8).
+- Su **índice general es menor a 50**, o respondió Regular/Mala en 3 o más preguntas.
+
+Debajo está la tabla de entrevistas del período, con filtros por fecha, base y empleador, y el botón para **descargar todo a Excel**. Si no tenés permiso de carga, el Excel sale sin las columnas de textuales.
+
+Al final, quien tiene permiso puede **eliminar** una entrevista cargada por error (pide confirmación).
+
+### Pestaña 3: Indicadores
+
+Todo lo de esta pestaña es agregado: **no aparecen nombres**.
+
+**Cómo leer los índices**: todas las respuestas cerradas usan la misma escala de 4 puntos (Mala=1, Regular=2, Buena=3, Muy buena=4), que después se lleva a una escala de 0 a 100 para que sea más fácil de comparar.
+
+> **El número de referencia es 67.** Equivale a que todos hayan respondido "Buena" en todo. Por debajo de 50 la situación es crítica; por encima de 84, muy buena. **50 no es "neutro"**: con una escala de 4 puntos no hay punto medio.
+
+- **Las 6 tarjetas de arriba**: entrevistas cargadas, cobertura, índice general, autopercepción, cuántos recomendarían la empresa y cuántas entrevistas tienen alerta.
+- **Índice por dimensión**: agrupa las preguntas en Adaptación, Operación, Condiciones y Vínculos. Cada barra aclara con cuántas preguntas se calcula. Las dos últimas filas son preguntas sueltas, no índices.
+- **Respuestas por pregunta**: la pregunta con peor promedio queda arriba. Es el gráfico más accionable: te dice exactamente dónde está el problema.
+- **Qué dicen los conductores**: frecuencia de las respuestas de categoría. "Lo que menos gusta" y "qué cambiarías" miden lo mismo desde ángulos distintos — lo interesante es dónde no coinciden.
+- **Índice por base**: solo se muestran bases con 5 o más entrevistas, para no sacar conclusiones de un caso suelto.
+- **Cobertura por mes de ingreso**: de los que entraron cada mes, a cuántos se entrevistó. El denominador **incluye a quienes ya se dieron de baja**: si no, un conductor que renunció sin ser entrevistado inflaría la cobertura justo en el caso que más importa.
+
+---
+
+## 6. Auditoría: quién hizo qué
+
+Todo movimiento que cambia datos queda registrado. La pestaña **Auditoría** muestra ese registro y sólo la ven los usuarios habilitados (hoy: Lu y Flor).
+
+### Qué se registra
+| Acción | Cuándo se anota |
+|---|---|
+| **Alta** | Se carga un adelanto, un descuento, una entrevista o una minuta |
+| **Baja** | Se elimina cualquiera de esos registros |
+| **Cambio** | Se edita una minuta o se cambia su estado |
+| **Exportación** | Se descarga el Excel del Santander (lleva CUIL y CBU) o entrevistas de Seguimiento |
+| **Lectura sensible** | Alguien abre una entrevista y ve las respuestas textuales del conductor |
+| **Ingreso / Salida** | Login, logout e intentos de login fallidos |
+
+De cada movimiento queda: fecha y hora, usuario, módulo, acción y un detalle legible (por ejemplo *"MARTINEZ JUAN (leg. 4821) · 15/09/2026 · $ 50.000"*).
+
+**Lo que NO se registra:** el contenido de las respuestas de las entrevistas. Queda anotado que alguien la abrió, nunca lo que el conductor dijo. Si el textual se copiara al registro, el permiso que lo protege no serviría de nada.
+
+### Cómo usarla
+- **Movimientos**: la lista cronológica, agrupada por día. Se puede filtrar por usuario, por módulo, buscar texto en el detalle, o tildar *"Solo movimientos que cambiaron datos"* para sacar del medio los ingresos y salidas.
+- **Por usuario**: cuántos movimientos hizo cada uno, cuántos de ellos modificaron datos y cuándo fue el último.
+- El botón de descarga arma un Excel con lo que estés viendo filtrado.
+
+### El registro no se puede borrar desde la app
+La tabla acepta que se agreguen movimientos y que se lean, pero **no** que se editen ni se eliminen — ni siquiera por quien tiene permiso de ver la auditoría. Un registro de control que el propio auditado puede borrar no controla nada. Para corregir o purgar el historial hay que entrar al panel de Supabase con la clave de administrador.
 
 ---
 

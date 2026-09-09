@@ -8,6 +8,7 @@ from datetime import date
 import sys
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 from utils import cargar_empleados_activos, get_supabase, slug_empleador, COLOR_PRIMARY, COLOR_SECONDARY
+import auditoria
 from auth import can_edit
 import santander
 
@@ -234,6 +235,11 @@ def _guardar(legajo, apenom, empleador, fecha, monto, motivo):
         "monto": int(monto),
         "motivo": motivo.strip() if motivo else None,
     }).execute()
+    auditoria.registrar(
+        "adelantos", "alta",
+        f"{apenom} (leg. {legajo}) · {fecha.strftime('%d/%m/%Y')} · $ {int(monto):,}".replace(",", "."),
+        datos={"legajo": legajo, "empleador": empleador, "monto": int(monto)},
+    )
 
 
 def _leer(desde: date, hasta: date) -> pd.DataFrame:
@@ -252,8 +258,9 @@ def _leer(desde: date, hasta: date) -> pd.DataFrame:
     return df
 
 
-def _eliminar(record_id: str):
+def _eliminar(record_id: str, detalle: str = ""):
     get_supabase().table(TABLA).delete().eq("id", record_id).execute()
+    auditoria.registrar("adelantos", "baja", detalle, registro_id=record_id)
 
 
 def _stats_mes() -> dict:
@@ -465,12 +472,21 @@ else:
         st.error("No se encuentra el template del banco (templates/santander_pagos.xlsx).")
     else:
         xlsx = santander.generar_excel_santander(df_pago, fecha_pago)
-        st.download_button(
+        # El archivo del banco lleva CUIL y CBU de cada empleado: quién se lo
+        # llevó y cuándo es justamente lo que hay que poder rastrear.
+        if st.download_button(
             "⬇  Descargar Excel (Santander)",
             data=xlsx,
             file_name=f"{slug_empleador(empleador_sel)}_{desde.strftime('%d-%m-%Y')}_a_{hasta.strftime('%d-%m-%Y')}.xlsx",
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        )
+        ):
+            auditoria.registrar(
+                "adelantos", "export",
+                f"Excel Santander · {empleador_sel} · "
+                f"{desde.strftime('%d/%m/%Y')} a {hasta.strftime('%d/%m/%Y')} · "
+                f"{len(df_pago)} registros (incluye CUIL y CBU)",
+                datos={"empleador": empleador_sel, "registros": int(len(df_pago))},
+            )
 
 # ─── Sección eliminar ─────────────────────────────────────────
 if can_edit("adelantos"):
@@ -500,7 +516,8 @@ if can_edit("adelantos"):
                 c1, c2 = st.columns([1, 1])
                 with c1:
                     if st.button("Sí, eliminar", key="btn_confirm_a"):
-                        _eliminar(st.session_state["del_id_a"])
+                        _eliminar(st.session_state["del_id_a"],
+                                  st.session_state.get("del_label_a", ""))
                         st.session_state.pop("del_id_a", None)
                         st.session_state.pop("del_label_a", None)
                         st.session_state["deleted_ok_a"] = True

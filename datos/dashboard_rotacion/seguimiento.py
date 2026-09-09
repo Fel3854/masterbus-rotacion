@@ -42,11 +42,13 @@ ESCALA_XLSX = ("Muy buena", "Buena", "Regular", "Mala")
 # ─── Dimensiones analíticas ──────────────────────────────────
 # OJO: `dimension` NO es lo mismo que `seccion`. La sección (1-6) ordena el
 # formulario tal como está en papel. La dimensión agrupa para los índices:
-#   · P6 ("relación con Tráfico y los supervisores") mide lo mismo que P14
-#     ("relación con los supervisores"), así que indexa en 'vinculos' aunque
-#     se muestre en la sección 2.
-#   · P8 y P20 quedan sin dimensión: un índice de un solo ítem es la pregunta
+#   · P5 ("relación con Tráfico y los operadores") pregunta por un vínculo, no
+#     por la operación: indexa en 'vinculos' aunque se muestre en la sección 2.
+#   · P7 y P18 quedan sin dimensión: un índice de un solo ítem es la pregunta
 #     disfrazada con decimales. Se reportan como ítems sueltos.
+#
+# `cod` (p01…p20) es el nombre de la columna en Postgres y NO se renumera al
+# sacar preguntas: `n` es lo único que ve el usuario y va corrido 1..N.
 DIMENSIONES = {
     "adaptacion":  "Adaptación e inducción",
     "operacion":   "Operación y unidades",
@@ -65,63 +67,59 @@ SECCIONES = {
 
 PREGUNTAS = [
     # ── Sección 1 · Adaptación al puesto ─────────────────────────────────
-    {"cod": "p01", "n": 1, "seccion": 1, "dimension": "adaptacion", "tipo": "escala",
+    {"cod": "p01", "seccion": 1, "dimension": "adaptacion", "tipo": "escala",
      "texto": "¿Cómo te sentís en estos primeros meses trabajando con nosotros?",
      "corto": "Cómo se siente",
      "opciones": ("Muy bien", "Bien", "Más o menos", "Mal")},
 
-    {"cod": "p02", "n": 2, "seccion": 1, "dimension": None, "tipo": "categoria",
+    {"cod": "p02", "seccion": 1, "dimension": None, "tipo": "categoria",
      "texto": "¿Qué fue lo que más te costó durante estos primeros meses?",
      "corto": "Lo que más costó",
      "opciones": ("Aprender los recorridos", "Manejar las unidades",
+                  "Uso de la PAD / tablet",
                   "Horarios y francos", "Ritmo / carga de trabajo",
                   "Trámites y documentación", "Trato con pasajeros",
                   "Relación con supervisores", "Adaptarme al grupo",
                   "Nada en particular", "Otro"),
      "texto_label": "Detalle / textual"},
 
-    {"cod": "p03", "n": 3, "seccion": 1, "dimension": "adaptacion", "tipo": "escala",
+    {"cod": "p03", "seccion": 1, "dimension": "adaptacion", "tipo": "escala",
      "texto": "¿Sentís que recibiste la capacitación necesaria para realizar correctamente tu trabajo?",
      "corto": "Capacitación del puesto",
      "opciones": ("Sí, completa", "Sí, en parte", "Fue escasa", "No recibí")},
 
     # ── Sección 2 · Operación y unidades ─────────────────────────────────
-    {"cod": "p04", "n": 4, "seccion": 2, "dimension": "operacion", "tipo": "escala",
-     "texto": "¿Te sentís cómodo manejando las distintas unidades de la empresa?",
-     "corto": "Comodidad con las unidades",
-     "opciones": ("Con todas", "Con casi todas", "Con algunas", "Con ninguna")},
-
-    {"cod": "p05", "n": 5, "seccion": 2, "dimension": "operacion", "tipo": "escala",
+    {"cod": "p05", "seccion": 2, "dimension": "operacion", "tipo": "escala",
      "texto": "¿Conocés el funcionamiento básico de las diferentes unidades que te asignaron?",
      "corto": "Conocimiento de unidades",
      "opciones": ("Sí, todas", "Casi todas", "Solo algunas", "No")},
 
     # Se muestra en la sección 2 (forma en papel) pero indexa en 'vinculos':
-    # mide el mismo constructo que P14 y en 'operacion' contaminaría el índice.
-    {"cod": "p06", "n": 6, "seccion": 2, "dimension": "vinculos", "tipo": "escala",
-     "texto": "¿Cómo es tu relación con Tráfico y los supervisores?",
+    # pregunta por un vínculo, y en 'operacion' contaminaría el índice.
+    {"cod": "p06", "seccion": 2, "dimension": "vinculos", "tipo": "escala",
+     "texto": "¿Cómo es tu relación con Tráfico y los operadores?",
      "corto": "Relación con Tráfico",
      "opciones": ESCALA_XLSX},
 
-    {"cod": "p07", "n": 7, "seccion": 2, "dimension": "operacion", "tipo": "escala",
-     "texto": "Cuando tenés un problema durante el servicio, ¿sentís que sabés a quién recurrir y cómo actuar?",
+    {"cod": "p07", "seccion": 2, "dimension": "operacion", "tipo": "escala",
+     "texto": "¿Sabés a quién recurrir y cómo actuar?",
      "corto": "Sabe a quién recurrir",
      "opciones": ("Siempre", "Casi siempre", "A veces", "Nunca")},
 
     # ── Sección 3 · Seguridad y conducción ───────────────────────────────
     # dimension=None a propósito: un solo ítem no es un índice. Se reporta suelto.
-    {"cod": "p08", "n": 8, "seccion": 3, "dimension": None, "tipo": "escala",
+    {"cod": "p08", "seccion": 3, "dimension": None, "tipo": "escala",
      "texto": "¿Considerás que la capacitación recibida en Seguridad Vial fue suficiente?",
      "corto": "Capacitación Seguridad Vial",
      "opciones": ("Sí, suficiente", "En general sí", "Insuficiente", "No la recibí")},
 
-    {"cod": "p09", "n": 9, "seccion": 3, "dimension": None, "tipo": "flag",
+    {"cod": "p09", "seccion": 3, "dimension": None, "tipo": "flag",
      "texto": "¿Hay alguna norma o procedimiento de seguridad que te resulte difícil de cumplir en la práctica?",
      "corto": "Norma difícil de cumplir",
      "opciones": ("No", "Sí"), "alerta_si": True,
      "texto_label": "¿Cuál? (obligatorio si respondió Sí)"},
 
-    {"cod": "p10", "n": 10, "seccion": 3, "dimension": None, "tipo": "categoria",
+    {"cod": "p10", "seccion": 3, "dimension": None, "tipo": "categoria",
      "texto": "¿Qué creés que podríamos mejorar para que puedas realizar tu trabajo de manera más segura?",
      "corto": "Mejora de seguridad",
      "opciones": ("Más capacitación", "Estado de las unidades",
@@ -132,33 +130,28 @@ PREGUNTAS = [
      "texto_label": "Detalle / textual"},
 
     # ── Sección 4 · Condiciones de trabajo ───────────────────────────────
-    {"cod": "p11", "n": 11, "seccion": 4, "dimension": "condiciones", "tipo": "escala",
+    {"cod": "p11", "seccion": 4, "dimension": "condiciones", "tipo": "escala",
      "texto": "¿Cómo te resulta el esquema de horarios y francos?",
      "corto": "Horarios y francos",
      "opciones": ("Muy bueno", "Bueno", "Regular", "Malo")},
 
-    {"cod": "p12", "n": 12, "seccion": 4, "dimension": "condiciones", "tipo": "escala",
+    {"cod": "p12", "seccion": 4, "dimension": "condiciones", "tipo": "escala",
      "texto": "¿Cómo evaluás las condiciones generales de trabajo?",
      "corto": "Condiciones generales",
      "opciones": ("Muy buenas", "Buenas", "Regulares", "Malas")},
 
     # ── Sección 5 · Relación y clima laboral ─────────────────────────────
-    {"cod": "p13", "n": 13, "seccion": 5, "dimension": "vinculos", "tipo": "escala",
+    {"cod": "p13", "seccion": 5, "dimension": "vinculos", "tipo": "escala",
      "texto": "¿Cómo es tu relación con tus compañeros?",
      "corto": "Relación con compañeros",
      "opciones": ESCALA_XLSX},
 
-    {"cod": "p14", "n": 14, "seccion": 5, "dimension": "vinculos", "tipo": "escala",
-     "texto": "¿Cómo es tu relación con los supervisores?",
-     "corto": "Relación con supervisores",
-     "opciones": ESCALA_XLSX},
-
-    {"cod": "p15", "n": 15, "seccion": 5, "dimension": "vinculos", "tipo": "escala",
+    {"cod": "p15", "seccion": 5, "dimension": "vinculos", "tipo": "escala",
      "texto": "¿Sentís que cuando tenés un problema o una duda podés plantearlo y recibir ayuda?",
      "corto": "Puede pedir ayuda",
      "opciones": ("Siempre", "Casi siempre", "A veces", "Nunca")},
 
-    {"cod": "p16", "n": 16, "seccion": 5, "dimension": None, "tipo": "flag",
+    {"cod": "p16", "seccion": 5, "dimension": None, "tipo": "flag",
      "texto": "¿Hay alguna situación o aspecto del ambiente laboral que te esté incomodando?",
      "corto": "Situación incomodando",
      "opciones": ("No", "Sí"), "alerta_si": True,
@@ -167,7 +160,7 @@ PREGUNTAS = [
     # ── Sección 6 · Expectativas y propuestas ────────────────────────────
     # P17 / P18 / P19 comparten vocabulario a propósito: permite cruzar
     # atractor vs. detractor sobre los mismos ejes.
-    {"cod": "p17", "n": 17, "seccion": 6, "dimension": None, "tipo": "categoria",
+    {"cod": "p17", "seccion": 6, "dimension": None, "tipo": "categoria",
      "texto": "¿Qué es lo que más te gusta de trabajar acá?",
      "corto": "Lo que más gusta",
      "opciones": ("El sueldo / cobrar en fecha", "Los compañeros",
@@ -177,7 +170,7 @@ PREGUNTAS = [
                   "Otro"),
      "texto_label": "Detalle / textual"},
 
-    {"cod": "p18", "n": 18, "seccion": 6, "dimension": None, "tipo": "categoria",
+    {"cod": "p18", "seccion": 6, "dimension": None, "tipo": "categoria",
      "texto": "¿Qué es lo que menos te gusta?",
      "corto": "Lo que menos gusta",
      "opciones": ("Los horarios y francos", "El sueldo",
@@ -187,7 +180,7 @@ PREGUNTAS = [
                   "Nada en particular", "Otro"),
      "texto_label": "Detalle / textual"},
 
-    {"cod": "p19", "n": 19, "seccion": 6, "dimension": None, "tipo": "categoria",
+    {"cod": "p19", "seccion": 6, "dimension": None, "tipo": "categoria",
      "texto": "Si pudieras cambiar una sola cosa de la empresa o de la operación, ¿qué cambiarías?",
      "corto": "Qué cambiaría",
      "opciones": ("Horarios y francos", "Sueldo y adicionales",
@@ -196,7 +189,7 @@ PREGUNTAS = [
                   "Instalaciones y comodidades", "Nada", "Otro"),
      "texto_label": "Detalle / textual"},
 
-    {"cod": "p20", "n": 20, "seccion": 6, "dimension": None, "tipo": "escala",
+    {"cod": "p20", "seccion": 6, "dimension": None, "tipo": "escala",
      "texto": "Si tuvieras que recomendarle a un conocido trabajar como conductor en nuestra empresa, ¿qué le dirías?",
      "corto": "Recomendaría la empresa",
      "opciones": ("Sí, sin dudas", "Sí, con reparos", "Lo dudaría", "No")},
@@ -219,6 +212,12 @@ AUTOEVAL = [
      "opciones": ESCALA_XLSX},
 ]
 
+# `n` es el número que ve el conductor en el formulario: se calcula por posición
+# y queda siempre corrido 1..N. Si mañana se saca una pregunta del catálogo, el
+# `cod` (columna de Postgres) no se toca pero la numeración no queda con huecos.
+for _i, _p in enumerate(PREGUNTAS, start=1):
+    _p["n"] = _i
+
 # ─── Vistas derivadas del catálogo ───────────────────────────
 ESCALAS      = [p for p in PREGUNTAS if p["tipo"] == "escala"]
 FLAGS        = [p for p in PREGUNTAS if p["tipo"] == "flag"]
@@ -233,7 +232,7 @@ COLUMNAS_TEXTO = COD_TEXTOS + [
     "frases_destacadas", "fortalezas", "aspectos_mejorar", "compromisos",
 ]
 
-# Observación del entrevistador, una por cada pregunta numerada (1-20). Es una
+# Observación del entrevistador, una por cada pregunta numerada del catálogo. Es una
 # nota interna del entrevistador (distinta del textual, que es la voz del
 # conductor); se trata como confidencial igual que los textuales.
 COD_OBS = [p["cod"] + "_obs" for p in PREGUNTAS]
@@ -411,13 +410,6 @@ def _motivos_fila(fila):
     if n12 is not None and not pd.isna(n12) and n12 >= 3:
         motivos.append("3 o más ítems respondidos Regular o Mala")
 
-    p06, p14 = _val(fila, "p06"), _val(fila, "p14")
-    if p06 is not None and p14 is not None:
-        try:
-            if abs(float(p06) - float(p14)) >= 2:
-                motivos.append("Revisar codificación: P6 y P14 difieren mucho")
-        except (TypeError, ValueError):
-            pass
     return motivos
 
 

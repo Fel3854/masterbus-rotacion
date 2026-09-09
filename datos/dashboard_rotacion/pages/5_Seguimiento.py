@@ -13,6 +13,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 from utils import (cargar_datos, cargar_empleados_activos, chart_base,  # noqa: E402
                    delta_html, get_supabase, COLOR_PRIMARY, COLOR_SECONDARY)
 from auth import can_edit, current_user  # noqa: E402
+import auditoria
 import seguimiento as sg  # noqa: E402
 
 # ─── CSS ─────────────────────────────────────────────────────
@@ -385,10 +386,40 @@ def _leer() -> pd.DataFrame:
 
 def _guardar(payload: dict) -> None:
     get_supabase().table(sg.TABLA).insert(payload).execute()
+    # Sólo la cabecera: las respuestas del conductor son confidenciales y no
+    # pueden filtrarse al log (ver el docstring de auditoria.py).
+    auditoria.registrar(
+        "seguimiento", "alta",
+        f"{payload.get('apenom')} (leg. {payload.get('legajo')}) · "
+        f"entrevista del {payload.get('fecha_entrevista')}",
+        datos={"legajo": payload.get("legajo"), "base": payload.get("base")},
+    )
 
 
-def _eliminar(record_id: str) -> None:
+def _eliminar(record_id: str, detalle: str = "") -> None:
     get_supabase().table(sg.TABLA).delete().eq("id", record_id).execute()
+    auditoria.registrar("seguimiento", "baja", detalle, registro_id=record_id)
+
+
+def _auditar_apertura(fila) -> None:
+    """Registra que alguien abrió la vista ampliada de una entrevista.
+
+    Se llama al ABRIR (cuando se setea `ver_id_sg`), no al renderizar: la vista
+    se repinta en cada rerun y el log se llenaría de duplicados.
+
+    Sólo cuenta como lectura sensible si el usuario tiene permiso para ver los
+    textuales; sin ese permiso la vista muestra puntajes, que ve cualquiera.
+    """
+    if not PUEDE_EDITAR:
+        return
+    fecha = fila.get("fecha_entrevista")
+    fecha_txt = fecha.strftime("%d/%m/%Y") if pd.notna(fecha) else "—"
+    auditoria.registrar(
+        "seguimiento", "lectura",
+        f"Abrió la entrevista de {fila.get('apenom')} (leg. {fila.get('legajo')}) "
+        f"del {fecha_txt} — incluye respuestas textuales",
+        registro_id=fila.get("id"),
+    )
 
 
 # ─── Utilidades de render ─────────────────────────────────────
@@ -947,14 +978,20 @@ with tab_carga:
                     st.session_state.get("tabla_seed_sg", 0) + 1
                 st.rerun()
         with c_desc:
-            st.download_button(
+            if st.download_button(
                 "⬇  Descargar esta entrevista (Excel)",
                 data=sg.exportar_excel(fila.to_frame().T, incluir_textos=PUEDE_EDITAR),
                 file_name=(f"entrevista_{fila['legajo']}_"
                            f"{fila['fecha_entrevista'].strftime('%d-%m-%Y')}.xlsx"),
                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                 key="dl_una_sg",
-            )
+            ):
+                auditoria.registrar(
+                    "seguimiento", "export",
+                    f"Descargó la entrevista de {fila['apenom']} (leg. {fila['legajo']})"
+                    + (" — con textuales" if PUEDE_EDITAR else " — sin textuales"),
+                    registro_id=fila["id"],
+                )
 
         _render_detalle(fila, incluir_textos=PUEDE_EDITAR)
 
@@ -1035,6 +1072,7 @@ with tab_carga:
                         if st.button("Ver entrevista", key=f"ver_al_{a['id']}",
                                      width="stretch"):
                             st.session_state["ver_id_sg"] = a["id"]
+                            _auditar_apertura(a)
                             st.rerun()
 
                 # Rojas y atención no son lo mismo y antes se mezclaban en una
@@ -1089,15 +1127,23 @@ with tab_carga:
             filas_sel = list((evento or {}).get("selection", {}).get("rows", []))
             if filas_sel:
                 st.session_state["ver_id_sg"] = f.iloc[filas_sel[0]]["id"]
+                _auditar_apertura(f.iloc[filas_sel[0]])
                 st.rerun()
 
-            st.download_button(
+            if st.download_button(
                 "⬇  Descargar entrevistas (Excel)",
                 data=sg.exportar_excel(f, incluir_textos=PUEDE_EDITAR),
                 file_name=(f"seguimiento_conductores_{desde.strftime('%d-%m-%Y')}"
                            f"_a_{hasta.strftime('%d-%m-%Y')}.xlsx"),
                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-            )
+            ):
+                auditoria.registrar(
+                    "seguimiento", "export",
+                    f"Descargó {len(f)} entrevista(s) del "
+                    f"{desde.strftime('%d/%m/%Y')} al {hasta.strftime('%d/%m/%Y')}"
+                    + (" — con textuales" if PUEDE_EDITAR else " — sin textuales"),
+                    datos={"registros": int(len(f))},
+                )
 
         # ── Eliminar ──
         if PUEDE_EDITAR:
@@ -1129,7 +1175,8 @@ with tab_carga:
                         with c1:
                             if st.button("Sí, eliminar", key="btn_confirm_sg"):
                                 try:
-                                    _eliminar(st.session_state["del_id_sg"])
+                                    _eliminar(st.session_state["del_id_sg"],
+                                              st.session_state.get("del_label_sg", ""))
                                     st.session_state["deleted_ok_sg"] = True
                                 except Exception:
                                     st.error("No se pudo eliminar la entrevista.")

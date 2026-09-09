@@ -26,10 +26,9 @@ CREATE TABLE IF NOT EXISTS seguimiento_conductores (
     fecha_registro              TIMESTAMPTZ DEFAULT now(),
 
     -- ── Secciones 1-6: respuestas cerradas ──
-    -- Escalas 1-4 (13 ítems, alimentan los índices)
+    -- Escalas 1-4 (11 ítems, alimentan los índices)
     p01  SMALLINT CHECK (p01 BETWEEN 1 AND 4),
     p03  SMALLINT CHECK (p03 BETWEEN 1 AND 4),
-    p04  SMALLINT CHECK (p04 BETWEEN 1 AND 4),
     p05  SMALLINT CHECK (p05 BETWEEN 1 AND 4),
     p06  SMALLINT CHECK (p06 BETWEEN 1 AND 4),
     p07  SMALLINT CHECK (p07 BETWEEN 1 AND 4),
@@ -37,7 +36,6 @@ CREATE TABLE IF NOT EXISTS seguimiento_conductores (
     p11  SMALLINT CHECK (p11 BETWEEN 1 AND 4),
     p12  SMALLINT CHECK (p12 BETWEEN 1 AND 4),
     p13  SMALLINT CHECK (p13 BETWEEN 1 AND 4),
-    p14  SMALLINT CHECK (p14 BETWEEN 1 AND 4),
     p15  SMALLINT CHECK (p15 BETWEEN 1 AND 4),
     p20  SMALLINT CHECK (p20 BETWEEN 1 AND 4),
 
@@ -73,14 +71,13 @@ CREATE TABLE IF NOT EXISTS seguimiento_conductores (
     aspectos_mejorar  TEXT,
     compromisos       TEXT,
 
-    -- ── Observación del entrevistador por pregunta (1-20) ──
+    -- ── Observación del entrevistador, una por pregunta del catálogo ──
     -- Nota interna del entrevistador, distinta del textual (voz del conductor);
     -- confidencial igual que los textuales. En bases ya creadas se agregan con
     -- ALTER TABLE ... ADD COLUMN IF NOT EXISTS pNN_obs text.
     p01_obs  TEXT,
     p02_obs  TEXT,
     p03_obs  TEXT,
-    p04_obs  TEXT,
     p05_obs  TEXT,
     p06_obs  TEXT,
     p07_obs  TEXT,
@@ -90,7 +87,6 @@ CREATE TABLE IF NOT EXISTS seguimiento_conductores (
     p11_obs  TEXT,
     p12_obs  TEXT,
     p13_obs  TEXT,
-    p14_obs  TEXT,
     p15_obs  TEXT,
     p16_obs  TEXT,
     p17_obs  TEXT,

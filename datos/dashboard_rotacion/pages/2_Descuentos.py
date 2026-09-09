@@ -10,6 +10,7 @@ from dateutil.relativedelta import relativedelta
 import sys
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 from utils import cargar_empleados_activos, get_supabase, slug_empleador, COLOR_PRIMARY, COLOR_SECONDARY
+import auditoria
 from auth import can_edit
 
 # ─── CSS ─────────────────────────────────────────────────────
@@ -279,12 +280,19 @@ def _leer(desde: date, hasta: date) -> pd.DataFrame:
     return df
 
 
-def _eliminar(record_id: str, tabla: str = TABLA):
+def _eliminar(record_id: str, tabla: str = TABLA, detalle: str = ""):
     get_supabase().table(tabla).delete().eq("id", record_id).execute()
+    auditoria.registrar("descuentos", "baja", detalle, registro_id=record_id,
+                        datos={"tabla": tabla})
 
 
-def _eliminar_grupo(grupo_id: str):
+def _eliminar_grupo(grupo_id: str, detalle: str = "", cuotas: int = 0):
     get_supabase().table(TABLA).delete().eq("grupo_id", grupo_id).execute()
+    auditoria.registrar(
+        "descuentos", "baja",
+        f"{detalle} — plan completo de {cuotas} cuotas" if cuotas else detalle,
+        registro_id=grupo_id, datos={"grupo_id": grupo_id, "cuotas": cuotas},
+    )
 
 
 def _leer_adelantos(desde: date, hasta: date) -> pd.DataFrame:
@@ -423,6 +431,13 @@ with col_form:
                                 )
                         monto_fmt = f"$ {total:,.0f}".replace(",",".")
                         detalle = f"en {n} cuotas" if n > 1 else "en 1 pago"
+                        auditoria.registrar(
+                            "descuentos", "alta",
+                            f"{r['apenom']} (leg. {r['legajo']}) · {tipo} · "
+                            f"{fecha.strftime('%d/%m/%Y')} · {monto_fmt} {detalle}",
+                            datos={"legajo": r["legajo"], "empleador": r["empleador"],
+                                   "tipo": tipo, "monto_total": total, "cuotas": n},
+                        )
                         st.success(f"✓ Descuento registrado — **{r['apenom']}** · {tipo} · {fecha.strftime('%d/%m/%Y')} · **{monto_fmt}** {detalle}")
                         st.cache_data.clear()
                     except Exception:
@@ -589,9 +604,11 @@ if can_edit("descuentos"):
                 with c1:
                     if st.button("Sí, eliminar", key="btn_confirm_d"):
                         if es_grupo:
-                            _eliminar_grupo(st.session_state["del_grupo_d"])
+                            _eliminar_grupo(st.session_state["del_grupo_d"], lbl,
+                                            int(st.session_state.get("del_ct_d", 0)))
                         else:
-                            _eliminar(st.session_state["del_id_d"], st.session_state["del_tabla_d"])
+                            _eliminar(st.session_state["del_id_d"],
+                                      st.session_state["del_tabla_d"], lbl)
                         for _k in ("del_id_d", "del_tabla_d", "del_grupo_d", "del_ct_d", "del_label_d"):
                             st.session_state.pop(_k, None)
                         st.session_state["deleted_ok_d"] = True

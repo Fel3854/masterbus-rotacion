@@ -12,10 +12,9 @@ import seguimiento as sg  # noqa: E402
 
 
 # ─── Catálogo ────────────────────────────────────────────────
-def test_catalogo_tiene_las_20_preguntas_del_formulario():
-    assert len(sg.PREGUNTAS) == 20
-    assert [p["n"] for p in sg.PREGUNTAS] == list(range(1, 21))
-    assert len(sg.ESCALAS) == 13
+def test_catalogo_tiene_las_18_preguntas_del_formulario():
+    assert len(sg.PREGUNTAS) == 18
+    assert len(sg.ESCALAS) == 11
     assert len(sg.FLAGS) == 2
     assert len(sg.CATEGORIAS) == 5
 
@@ -121,6 +120,16 @@ def _fila(valor=4, **extra):
     return fila
 
 
+def _item(items, cod):
+    """Item del detalle por código de pregunta.
+
+    La etiqueta visible (`n`) se calcula por posición en el catálogo, así que
+    buscar por "11" se rompería la próxima vez que se saque una pregunta.
+    """
+    etiqueta = str(sg.POR_COD[cod]["n"])
+    return next(i for i in items if i["etiqueta"] == etiqueta)
+
+
 def test_indices_extremos():
     df = pd.DataFrame([_fila(4), _fila(1)])
     out = sg.calcular_indices(df)
@@ -168,9 +177,15 @@ def test_indice_bajo_dispara_atencion():
     assert out.loc[0, "nivel_alerta"] == "Atención"
 
 
-def test_divergencia_p06_p14_marca_calidad_de_dato():
-    out = sg.calcular_indices(pd.DataFrame([_fila(4, p06=4, p14=2)]))
-    assert "Revisar codificación: P6 y P14 difieren mucho" in out.loc[0, "motivos_alerta"]
+def test_preguntas_sacadas_del_formulario_no_quedan_en_el_catalogo():
+    # P4 (comodidad con las unidades) y P14 (relación con supervisores) se
+    # sacaron por redundar con P5 y P6. Si vuelven, tiene que ser a propósito.
+    assert "p04" not in sg.POR_COD
+    assert "p14" not in sg.POR_COD
+
+
+def test_numeracion_visible_va_corrida_sin_huecos():
+    assert [p["n"] for p in sg.PREGUNTAS] == list(range(1, len(sg.PREGUNTAS) + 1))
 
 
 def test_entrevista_sin_problemas_no_genera_alerta():
@@ -200,7 +215,7 @@ def test_resumen_dimensiones_reporta_n_items():
     df = sg.calcular_indices(pd.DataFrame([_fila(4)]))
     res = sg.resumen_dimensiones(df)
     vinculos = res[res["clave"] == "vinculos"].iloc[0]
-    assert vinculos["n_items"] == 4
+    assert vinculos["n_items"] == 3
     assert res[res["clave"] == "p08"].iloc[0]["tipo"] == "item"
 
 
@@ -344,17 +359,17 @@ def test_detalle_arma_las_8_secciones_del_formulario():
     assert titulos[0].startswith("1.")
     assert "AUTOPERCEPCIÓN" in titulos[6]
     assert titulos[7].startswith("8.")
-    # las 20 preguntas + 4 de autopercepción + 1 de conclusión
-    assert sum(len(i) for _, i in secs) == 25
+    # todas las preguntas + 4 de autopercepción + 1 de conclusión
+    assert sum(len(i) for _, i in secs) == len(sg.PREGUNTAS) + 5
 
 
 def test_detalle_traduce_los_codigos_a_etiquetas_legibles():
     fila = _fila(4, p11=1, p18="El sueldo")
     secs = dict(sg.detalle_entrevista(fila, incluir_textos=True))
-    cond = next(i for i in secs["4. CONDICIONES DE TRABAJO"] if i["etiqueta"] == "11")
+    cond = _item(secs["4. CONDICIONES DE TRABAJO"], "p11")
     assert cond["respuesta"] == "Malo"
     assert cond["color"] == sg.COLOR_CRITICO
-    exp = next(i for i in secs["6. EXPECTATIVAS Y PROPUESTAS"] if i["etiqueta"] == "18")
+    exp = _item(secs["6. EXPECTATIVAS Y PROPUESTAS"], "p18")
     assert exp["respuesta"] == "El sueldo"
 
 
@@ -362,13 +377,13 @@ def test_detalle_marca_sin_responder_lo_que_falta():
     fila = _fila(4)
     fila["p11"] = None
     secs = dict(sg.detalle_entrevista(fila, incluir_textos=True))
-    item = next(i for i in secs["4. CONDICIONES DE TRABAJO"] if i["etiqueta"] == "11")
+    item = _item(secs["4. CONDICIONES DE TRABAJO"], "p11")
     assert item["respuesta"] == "Sin responder"
 
 
 def test_detalle_pinta_el_flag_en_si_como_problema():
     secs = dict(sg.detalle_entrevista(_fila(4, p16=True), incluir_textos=True))
-    item = next(i for i in secs["5. RELACIÓN Y CLIMA LABORAL"] if i["etiqueta"] == "16")
+    item = _item(secs["5. RELACIÓN Y CLIMA LABORAL"], "p16")
     assert item["respuesta"] == "Sí"
     assert item["color"] == sg.COLOR_CRITICO
 
