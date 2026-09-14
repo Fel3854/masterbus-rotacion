@@ -144,15 +144,21 @@ def fechafin_vacia(empleado: dict) -> bool:
 
 def fetch_empleados(api_url: str) -> List[Dict]:
     logger.info("Consultando API: %s", api_url)
-    try:
-        response = requests.get(api_url, timeout=30)
-        response.raise_for_status()
-        empleados = response.json()
-        logger.info("Empleados obtenidos de la API: %d", len(empleados))
-        return empleados
-    except requests.RequestException as e:
-        logger.error("Error al consultar la API: %s", e)
-        sys.exit(1)
+    intentos = 3
+    for intento in range(1, intentos + 1):
+        try:
+            response = requests.get(api_url, timeout=30)
+            response.raise_for_status()
+            empleados = response.json()
+            logger.info("Empleados obtenidos de la API: %d", len(empleados))
+            return empleados
+        except requests.RequestException as e:
+            logger.warning("Intento %d/%d fallido al consultar la API: %s", intento, intentos, e)
+            if intento < intentos:
+                import time
+                time.sleep(2 ** intento)  # backoff: 2s, 4s
+    logger.error("No se pudo conectar a la API tras %d intentos.", intentos)
+    sys.exit(1)
 
 
 def filtrar_empleados_mes5(
