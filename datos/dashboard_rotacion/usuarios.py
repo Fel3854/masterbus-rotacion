@@ -40,6 +40,7 @@ LARGO_MINIMO_PASSWORD = 8
 # en los DataFrames de la pantalla de administración.
 COLUMNAS = ["usuario", "nombre", "activo", "es_admin",
             "edit_adelantos", "edit_descuentos", "edit_seguimiento", "edit_minutas",
+            "ver_postulantes",
             "debe_cambiar_password", "fecha_alta", "creado_por", "ultimo_acceso"]
 
 # ─── Catálogo de permisos ────────────────────────────────────
@@ -54,6 +55,11 @@ PERMISOS = [
      "Cargar entrevistas y ver las respuestas textuales (confidenciales)"),
     ("edit_minutas",     "Minutas",
      "Crear, editar y eliminar minutas"),
+    # El único del catálogo que no es de edición: sin él la pestaña ni aparece.
+    # Las notas del registro tienen datos delicados de postulantes.
+    ("ver_postulantes",  "Postulantes",
+     "Ver el registro de entrevistas a postulantes (con motivos y "
+     "observaciones) y actualizarlo desde Access"),
 ]
 CLAVES_PERMISO = [c for c, _l, _d in PERMISOS]
 
@@ -120,10 +126,15 @@ def validar_password(password, repetida=None):
 
 
 def resumen_permisos(fila):
-    """Texto legible de lo que puede hacer un usuario. Va a la auditoría."""
-    if fila.get("es_admin"):
-        return "Administrador"
+    """Texto legible de lo que puede hacer un usuario. Va a la auditoría.
+
+    Ser admin no trae ningún otro permiso, así que si un admin además tiene
+    alguno se lista: si no, la auditoría diría «Administrador» a secas justo
+    cuando alguien se dio acceso a los datos.
+    """
     puede = [label for clave, label, _d in PERMISOS if fila.get(clave)]
+    if fila.get("es_admin"):
+        return " · ".join(["Administrador"] + puede)
     return " · ".join(puede) if puede else "Solo lectura"
 
 

@@ -14,7 +14,8 @@ Al ingresar, verás un menú lateral (a la izquierda) que te permitirá navegar 
 4. **Vencimientos**
 5. **Seguimiento** (entrevistas de conductores)
 6. **Minutas Reunión** (temas y acciones de RRHH)
-7. **Auditoría** y **Usuarios** (sólo visibles para el administrador)
+7. **Postulantes** (registro de entrevistas a postulantes; sólo visible para quien tiene el permiso)
+8. **Auditoría** y **Usuarios** (sólo visibles para el administrador)
 
 ---
 
@@ -141,7 +142,74 @@ Todo lo de esta pestaña es agregado: **no aparecen nombres**.
 
 ---
 
-## 6. Auditoría: quién hizo qué
+## 6. Postulantes: registro de entrevistas
+
+Esta pestaña sirve para consultar el **registro de entrevistas a postulantes (FORM 045 02)**: todas las personas entrevistadas desde 2007, con el puesto, el sector y lo que anotó quien las entrevistó. La pregunta que mejor responde es: *¿esta persona ya se presentó antes, y qué pasó esa vez?*
+
+**Las entrevistas se siguen cargando en Access**, como siempre. El dashboard guarda una copia para consultar, que se pone al día subiendo el archivo de Access (ver más abajo).
+
+**Quién la ve:** sólo los usuarios con el permiso *Postulantes*. Para el resto, la pestaña no aparece en el menú. Es la única sección que no ven todos, porque las notas incluyen datos delicados de personas que en su mayoría nunca entraron a la empresa.
+
+### Buscar
+
+Arriba de todo hay una sola caja de búsqueda. Escribí lo que sepas:
+
+- **Apellido y/o nombre**, en cualquier orden: `perez juan` o `juan perez`.
+- **DNI**, con o sin puntos: `30123456` o `30.123.456`.
+- **Palabras de las notas**: `stand by`, `prueba de manejo`, `preocu`.
+
+No importan las mayúsculas ni las tildes. Si escribís varias palabras, tienen que estar todas. Cada palabra busca por el comienzo: `paz` encuentra PAZ y PAZOS, pero no CAPAZ.
+
+### Filtros
+
+- **Puesto**: agrupado por familias. «Conductor» junta CHOFER, CONDUCTOR y todas sus variantes de tipeo, así no hay que elegirlas una por una.
+- **Sector / base** y **Entrevistador**: también unifican las distintas formas en que se escribió lo mismo.
+- **Desde / Hasta**: opcional. Si ponés fechas, las entrevistas que no tienen fecha cargada quedan afuera.
+- **Mostrar solo**: marcados aptos, con notas, o personas que se presentaron más de una vez.
+- **Limpiar filtros** vuelve todo a cero.
+
+La búsqueda y los filtros se combinan, y valen tanto para la lista como para el Resumen.
+
+### La lista y la ficha
+
+Las entrevistas aparecen de la más nueva a la más vieja. La columna **Veces** marca con «×2», «×3» a quien tiene más de una entrevista.
+
+**Hacé clic en una fila** para abrir la ficha: el texto completo de los motivos y las observaciones, y debajo las **otras entrevistas de esa misma persona** (mismo DNI). Dos avisos a tener en cuenta:
+
+- Si con ese DNI hay registros con **apellidos distintos**, la ficha lo advierte. Puede ser el mismo apellido mal tipeado o un DNI mal cargado: mirá los nombres antes de sacar conclusiones.
+- Si la entrevista **no tiene DNI**, no se puede armar el historial. Buscá por apellido.
+
+### Qué significa «Apto ✓»
+
+Significa que la casilla *Apto para ingresar* estaba tildada en Access. **Que no tenga tilde no quiere decir que la persona fue rechazada**: desde 2023 la casilla casi no se usa, y el resultado real está en las notas (por ejemplo «OK PREOCU» o «SE ENVIA PROPUESTA»). Por eso la pantalla nunca muestra «No apto» ni calcula porcentajes de rechazo.
+
+### Descargar
+
+**⬇ Descargar resultado (Excel)** baja lo que estés viendo, con las mismas columnas del formulario. Cada descarga queda anotada en Auditoría (cuántas entrevistas y con qué filtros, nunca el contenido de las notas).
+
+### Resumen
+
+Cuenta lo que dejan pasar la búsqueda y los filtros: entrevistas, personas, cuántas volvieron a presentarse, entrevistas por año y el reparto por puesto, sector y entrevistador.
+
+### Actualizar desde Access
+
+Cuando quieras traer las entrevistas nuevas:
+
+1. Entrá a la pestaña **Actualizar desde Access**.
+2. Subí **el archivo de Access (`.mdb`)** tal cual está. Si el navegador no te deja elegirlo, cerrá Access y probá de nuevo.
+3. Mirá la vista previa. Te dice cuántas entrevistas son **nuevas**, cuántas **modificadas** (y qué cambió en cada una), cuántas quedan **sin cambios** y cuántas **no están en el archivo**.
+4. Si está bien, **Confirmar actualización**.
+
+Para tener en cuenta:
+
+- **Nunca se borra nada.** Una entrevista que ya está en el dashboard queda aunque no venga en el archivo.
+- **Se puede repetir sin miedo.** Subir dos veces el mismo archivo no duplica nada.
+- Si el archivo es una **copia vieja** de la base, o si cambia demasiadas entrevistas de golpe, aparece un aviso y hay que tildar una confirmación para seguir. Ante la duda, no confirmes y revisá que sea el archivo correcto.
+- **Si el `.mdb` no se puede leer**, exportá la tabla a Excel y subí ese archivo: en Access, clic derecho sobre la tabla *FORM 045 02 REGISTRO DE ENTREVISTAS A POSTULANTES* → **Exportar** → **Excel**, sin cambiar los nombres de las columnas.
+
+---
+
+## 7. Auditoría: quién hizo qué
 
 Todo movimiento que cambia datos queda registrado. La pestaña **Auditoría** muestra ese registro y sólo la ve el **administrador**.
 
@@ -150,15 +218,15 @@ Todo movimiento que cambia datos queda registrado. La pestaña **Auditoría** mu
 |---|---|
 | **Alta** | Se carga un adelanto, un descuento, una entrevista o una minuta |
 | **Baja** | Se elimina cualquiera de esos registros |
-| **Cambio** | Se edita una minuta o se cambia su estado |
-| **Exportación** | Se descarga el Excel del Santander (lleva CUIL y CBU) o entrevistas de Seguimiento |
+| **Cambio** | Se edita una minuta o se cambia su estado, o se actualiza el registro de Postulantes desde Access |
+| **Exportación** | Se descarga el Excel del Santander (lleva CUIL y CBU), entrevistas de Seguimiento o el registro de Postulantes |
 | **Usuarios** | Se crea un usuario, se le cambian los permisos, se le resetea la contraseña o se lo desactiva |
 | **Lectura sensible** | Alguien abre una entrevista y ve las respuestas textuales del conductor |
 | **Ingreso / Salida** | Login, logout e intentos de login fallidos |
 
 De cada movimiento queda: fecha y hora, usuario, módulo, acción y un detalle legible (por ejemplo *"MARTINEZ JUAN (leg. 4821) · 15/09/2026 · $ 50.000"*).
 
-**Lo que NO se registra:** el contenido de las respuestas de las entrevistas. Queda anotado que alguien la abrió, nunca lo que el conductor dijo. Si el textual se copiara al registro, el permiso que lo protege no serviría de nada.
+**Lo que NO se registra:** el contenido de las respuestas de las entrevistas. Queda anotado que alguien la abrió, nunca lo que el conductor dijo. Si el textual se copiara al registro, el permiso que lo protege no serviría de nada. Lo mismo vale para Postulantes: se anota cuántas entrevistas se descargaron o actualizaron, nunca sus notas.
 
 ### Cómo usarla
 - **Movimientos**: la lista cronológica, agrupada por día. Se puede filtrar por usuario, por módulo, buscar texto en el detalle, o tildar *"Solo movimientos que cambiaron datos"* para sacar del medio los ingresos y salidas.
@@ -170,16 +238,17 @@ La tabla acepta que se agreguen movimientos y que se lean, pero **no** que se ed
 
 ---
 
-## 7. Usuarios: altas, permisos y contraseñas
+## 8. Usuarios: altas, permisos y contraseñas
 
 La pestaña **Usuarios** es del administrador. Desde ahí se da de alta a alguien nuevo, se le cambian los permisos o se le resetea la contraseña, sin tocar el código ni pedirle nada a nadie.
 
 ### Cómo funcionan los permisos
-Hay una regla general y dos excepciones:
+Hay una regla general y tres excepciones:
 
 - **Todos ven todas las secciones.** Los permisos sólo habilitan *cargar, editar y eliminar*.
 - **Excepción 1:** el permiso de *Seguimiento* además habilita ver las respuestas textuales de las entrevistas, que son confidenciales. Dárselo a alguien es dejarlo leer lo que el conductor dijo bajo promesa de confidencialidad.
-- **Excepción 2:** *Administrador* es el único permiso de lectura. Habilita Auditoría y Usuarios, y **no** habilita cargar datos: administrar y operar se mantienen separados a propósito.
+- **Excepción 2:** *Administrador* es un permiso de lectura. Habilita Auditoría y Usuarios, y **no** habilita cargar datos: administrar y operar se mantienen separados a propósito.
+- **Excepción 3:** *Postulantes* es el otro permiso de lectura. Sin él, la pestaña Postulantes ni aparece. El mismo permiso habilita actualizar el registro desde Access. Ser administrador **no** lo incluye: si un admin lo necesita, se lo tilda como a cualquier otro usuario, y ese cambio queda en la Auditoría.
 
 ### Dar de alta a alguien
 1. Pestaña **Nuevo usuario**.

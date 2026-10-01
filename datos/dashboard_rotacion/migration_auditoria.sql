@@ -14,7 +14,7 @@ CREATE TABLE IF NOT EXISTS auditoria (
     fecha        TIMESTAMPTZ NOT NULL DEFAULT now(),   -- en UTC; se muestra en hora AR
     usuario      TEXT NOT NULL,        -- clave de USERS ('lu', 'rrhh', ...)
     nombre       TEXT,                 -- nombre visible al momento del hecho
-    modulo       TEXT NOT NULL,        -- adelantos | descuentos | seguimiento | minutas | sesion
+    modulo       TEXT NOT NULL,        -- adelantos | descuentos | seguimiento | minutas | postulantes | usuarios | sesion
     accion       TEXT NOT NULL,        -- alta | baja | cambio | export | lectura | login | logout | login_fallido
     detalle      TEXT,                 -- resumen legible del movimiento
     registro_id  TEXT,                 -- id de la fila afectada, si aplica

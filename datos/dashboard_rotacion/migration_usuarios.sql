@@ -19,13 +19,19 @@ CREATE TABLE IF NOT EXISTS usuarios (
     -- operar se mantienen separados a propósito.
     es_admin      BOOLEAN NOT NULL DEFAULT FALSE,
 
-    -- Permisos de edición por módulo. Todos VEN todo; estos flags sólo habilitan
-    -- registrar/editar/eliminar. Excepción: edit_seguimiento además habilita
-    -- leer las respuestas textuales de las entrevistas, que son confidenciales.
+    -- Permisos de edición por módulo. Todos VEN todo (salvo Postulantes, más
+    -- abajo); estos flags sólo habilitan registrar/editar/eliminar. Excepción:
+    -- edit_seguimiento además habilita leer las respuestas textuales de las
+    -- entrevistas, que son confidenciales.
     edit_adelantos    BOOLEAN NOT NULL DEFAULT FALSE,
     edit_descuentos   BOOLEAN NOT NULL DEFAULT FALSE,
     edit_seguimiento  BOOLEAN NOT NULL DEFAULT FALSE,
     edit_minutas      BOOLEAN NOT NULL DEFAULT FALSE,
+
+    -- Permiso de LECTURA de la pestaña Postulantes: sin él la pestaña no
+    -- aparece. Se agregó después con un ALTER TABLE (ver
+    -- migration_entrevistas_postulantes.sql); acá queda para instalaciones nuevas.
+    ver_postulantes   BOOLEAN NOT NULL DEFAULT FALSE,
 
     password_hash TEXT NOT NULL,
     -- Se levanta al crear la cuenta y al resetear la contraseña: quien la fijó

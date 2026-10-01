@@ -94,7 +94,27 @@ def test_el_admin_no_arrastra_permisos_de_edicion():
 def test_las_claves_de_permiso_salen_del_catalogo():
     assert us.CLAVES_PERMISO == [c for c, _l, _d in us.PERMISOS]
     for clave, label, desc in us.PERMISOS:
-        assert clave.startswith("edit_") and label and desc
+        # `edit_` habilita cargar; `ver_` habilita una sección que no ven todos.
+        assert clave.startswith(("edit_", "ver_")) and label and desc
+
+
+def test_postulantes_es_el_unico_permiso_de_lectura_del_catalogo():
+    """Si aparece otro `ver_`, hay otra sección que dejó de ser visible para
+    todos: que sea una decisión y no un descuido."""
+    assert [c for c in us.CLAVES_PERMISO if c.startswith("ver_")] == ["ver_postulantes"]
+    assert "ver_postulantes" in us.COLUMNAS
+
+
+def test_el_admin_no_arrastra_el_acceso_a_postulantes():
+    assert us.resumen_permisos({"es_admin": True, "ver_postulantes": False}) == "Administrador"
+
+
+def test_si_un_admin_tiene_otro_permiso_el_resumen_lo_dice():
+    """El resumen va a la auditoría: que un admin se haya dado acceso a los
+    datos no puede quedar escondido detrás de un «Administrador» a secas."""
+    assert us.resumen_permisos({"es_admin": True, "ver_postulantes": True}) == \
+        "Administrador · Postulantes"
+    assert "Postulantes" in us.resumen_permisos({"ver_postulantes": True})
 
 
 # ─── Reglas de administrador ──────────────────────────────────

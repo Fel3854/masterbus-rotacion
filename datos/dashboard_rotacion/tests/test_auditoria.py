@@ -45,6 +45,11 @@ def test_normalizar_traduce_modulo_y_accion():
     assert out.loc[0, "accion_label"] == "Lectura sensible"
 
 
+def test_postulantes_tiene_etiqueta_propia():
+    out = _df(_fila(modulo="postulantes", accion="export"))
+    assert out.loc[0, "modulo_label"] == "Postulantes"
+
+
 def test_modulo_desconocido_se_muestra_crudo_en_vez_de_quedar_vacio():
     out = _df(_fila(modulo="modulo_nuevo", accion="accion_nueva"))
     assert out.loc[0, "modulo_label"] == "modulo_nuevo"

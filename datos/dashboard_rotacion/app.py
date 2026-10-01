@@ -4,7 +4,7 @@
 import logging
 import streamlit as st
 
-from auth import require_login, current_user, logout, es_admin
+from auth import require_login, current_user, logout, es_admin, puede_ver_postulantes
 
 logging.basicConfig(
     level=logging.WARNING,
@@ -29,8 +29,14 @@ paginas = [
     st.Page("pages/6_Minutas.py",                   title="Minutas Reunión",     icon="📝"),
 ]
 
-# Auditoría y Usuarios son del admin. Esconderlas del menú no alcanza como
-# control: cada página vuelve a chequear el permiso por su cuenta.
+# Postulantes es la única sección de datos que no ven todos: sólo quien tiene el
+# permiso. Como con las del admin, esconderla del menú no alcanza como control:
+# la página vuelve a chequearlo por su cuenta.
+if puede_ver_postulantes():
+    paginas.append(
+        st.Page("pages/9_Postulantes.py",           title="Postulantes",         icon="🗂️"))
+
+# Auditoría y Usuarios son del admin, con el mismo doble chequeo.
 if es_admin():
     paginas.append(
         st.Page("pages/7_Auditoria.py",             title="Auditoría",           icon="🔎"))

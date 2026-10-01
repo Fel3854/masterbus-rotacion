@@ -80,6 +80,7 @@ Se abre en el navegador en `http://localhost:8501`
 | Vencimientos | Control de documentación y habilitaciones próximas a vencer |
 | **Seguimiento** | **Entrevista de seguimiento del 2° mes de cada conductor: carga tabulada, cola de pendientes e indicadores de adaptación** |
 | Minutas Reunión | Temas y acciones de RRHH con estado y fecha límite |
+| Postulantes | Consulta del registro de entrevistas a postulantes (FORM 045 02), alimentado desde Access. Sólo con permiso `ver_postulantes` |
 | Auditoría | Registro de movimientos de los usuarios (`auditoria.py`). Sólo admin; tabla append-only |
 | Usuarios | Alta, permisos y contraseñas (`usuarios.py`). Sólo admin |
 | Manual de Usuario | Renderiza `automatizaciones/docs/manual_usuario.md` |
@@ -129,6 +130,67 @@ Dos invariantes que tienen test:
 
 Ojo con el volumen: la apertura de la vista ampliada se audita al SETEAR
 `ver_id_sg`, no al renderizar — la vista se repinta en cada rerun.
+
+### Postulantes
+
+`postulantes.py` + `pages/9_Postulantes.py` + `migration_entrevistas_postulantes.sql` + `tests/test_postulantes.py`.
+
+Consulta del registro de entrevistas a postulantes (FORM 045 02). **Access sigue
+siendo donde se carga**; la tabla `entrevistas_postulantes` es su copia y se pone
+al día subiendo el archivo desde la pestaña «Actualizar desde Access» (upsert por
+`numero_orden`, el autonumérico de Access).
+
+- **Se guarda crudo, se deriva al leer.** La tabla tiene el dato tal cual viene,
+  con sus typos. Familia de puesto (161 variantes → 9 familias), sector
+  normalizado, entrevistador unificado y «veces que se presentó» se calculan en
+  `enriquecer()` y no se guardan.
+- **`apto` sólo significa algo en TRUE.** Desde 2023 la casilla casi no se tilda
+  (2 % en 2025, con «OK PREOCU» en las notas). FALSE es "sin marcar", no
+  "rechazado": la pantalla nunca muestra «No apto» ni calcula tasas de rechazo, y
+  hay un test que lo protege.
+- **El DNI 0 o vacío nunca agrupa.** 263 entrevistas no tienen DNI; si el 0
+  agrupara serían una sola "persona". El historial es estrictamente por DNI válido.
+- **Permiso `ver_postulantes`**: es de LECTURA (la pestaña no aparece sin él) y
+  además habilita actualizar. No lo arrastra `es_admin`. Es la única sección de
+  datos que no ven todos, porque las notas tienen datos delicados.
+- **RLS sin DELETE**: policies de SELECT, INSERT y UPDATE; ni DELETE ni FOR ALL.
+  La app suma y corrige, nunca borra. Con test sobre el DDL.
+- **Lectura paginada**: `leer_todo()` usa `paginado.leer_paginado` (ver «Lecturas
+  a Supabase» más abajo).
+- **Lectura del `.mdb`**: `access-parser` (Python puro) con dos correcciones
+  aplicadas al objeto de la tabla en `_leer_mdb()`: una fecha con bytes inválidos
+  es un vacío, y cada columna de texto se lee de su `variable_column_number`. Sin
+  la segunda, como a la tabla se le borró una columna, los textos salen corridos
+  un lugar y se pierden las observaciones. La versión está **fijada** en
+  `requirements.txt`. Para revalidar tras cambiarla:
+  `POSTULANTES_MDB=… POSTULANTES_CSV=… python3 -m pytest tests/test_postulantes.py -k mdb`
+  (compara el `.mdb` real contra su export de referencia; tiene que dar 0 diferencias).
+- **Dos frenos antes de confirmar una carga** (`advertencias_de_carga`): al
+  archivo le faltan entrevistas que ya están (copia vieja), o cambia más del 20 %
+  de lo cargado (archivo mal leído). En ambos casos hay que tildar una confirmación.
+- **Auditoría**: se registran exportaciones (cantidad y filtros) y actualizaciones
+  (cantidades y nombre de archivo). Nunca el contenido de las notas.
+- **Datos reales fuera del repo**: los tests usan nombres y DNI inventados. El
+  `.mdb` y sus exports no se versionan.
+
+### Lecturas a Supabase: siempre paginadas
+
+`paginado.py` + `tests/test_paginado.py`. Las páginas lo importan desde `utils`.
+
+PostgREST devuelve como mucho **1000 filas por consulta y no avisa cuando
+corta** (verificado: un `.limit(5000)` recibía 1000). Toda lectura que pueda
+pasar ese número va por `leer_paginado(armar_consulta)`: Adelantos, Descuentos,
+Seguimiento, Minutas, Auditoría y Postulantes. Dos reglas para cada consulta:
+
+- **Orden único**: cerrar con `.order("id")` (o la clave). Con empates, Postgres
+  puede ordenar distinto en cada página y una fila se repite mientras otra se
+  pierde. Adelantos y Descuentos desempatan por `fecha_registro` y después `id`.
+- **`count="exact"` en el `.select()`**: con el total a la vista se corta cuando
+  están todas, sin depender del tope del servidor.
+
+Auditoría además tiene un máximo de 5000 movimientos en pantalla (dibuja un
+renglón por cada uno): pide uno de más y, si el período no entra, **avisa** en
+vez de recortar en silencio.
 
 ### Seguimiento de Conductores
 

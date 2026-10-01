@@ -11,7 +11,8 @@ un detalle legible. Es el rastro de control, así que tiene dos reglas duras:
 2. **No guarda el contenido confidencial.** Del Seguimiento se registra QUE
    alguien abrió o exportó una entrevista, nunca lo que el conductor dijo. Si el
    textual se copiara al log, el permiso que lo protege no serviría de nada:
-   bastaría con mirar la auditoría.
+   bastaría con mirar la auditoría. Lo mismo vale para Postulantes: se anota
+   cuántas entrevistas se exportaron o actualizaron, nunca sus notas.
 
 La tabla es append-only a nivel base (ver la migración): la anon key puede
 insertar y leer, pero NO borrar ni modificar. Un log que el auditado puede
@@ -49,6 +50,7 @@ MODULOS = {
     "descuentos":  "Descuentos",
     "seguimiento": "Seguimiento",
     "minutas":     "Minutas",
+    "postulantes": "Postulantes",
     "usuarios":    "Usuarios",
     "sesion":      "Sesión",
 }

@@ -112,7 +112,7 @@ with tab_lista:
                     with st.form(f"form_edit_{usuario}"):
                         nombre = st.text_input("Nombre visible", value=str(u["nombre"]),
                                                key=f"nom_{usuario}")
-                        st.caption("Permisos de edición (todos ven todas las secciones)")
+                        st.caption("Permisos (todos ven todas las secciones, salvo Postulantes)")
                         marcas = {}
                         for clave, label, desc in us.PERMISOS:
                             marcas[clave] = st.checkbox(
@@ -234,7 +234,7 @@ with tab_alta:
             help="Se la pasás por otro medio. En su primer ingreso la app le "
                  "va a exigir que la cambie por una que sólo conozca él.")
 
-        st.caption("Permisos de edición (todos ven todas las secciones)")
+        st.caption("Permisos (todos ven todas las secciones, salvo Postulantes)")
         marcas_nuevas = {}
         for clave, label, desc in us.PERMISOS:
             marcas_nuevas[clave] = st.checkbox(label, value=False, help=desc,

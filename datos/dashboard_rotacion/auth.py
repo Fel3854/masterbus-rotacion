@@ -7,14 +7,18 @@ guardan hasheadas, nunca en claro.
 Regla de permisos: todos VEN todas las secciones. Los flags `edit_*`
 controlan únicamente la EDICIÓN (registrar / eliminar) por sección.
 
-Dos excepciones a esa regla:
+Tres excepciones a esa regla:
   · En Seguimiento, `edit_seguimiento` además habilita LEER las respuestas
     textuales, que son confidenciales. Por eso las gerencias entran con el flag
     en False: ven los índices, los cortes y las alertas, pero no el textual
     crudo que el conductor dio bajo promesa de confidencialidad.
-  · `es_admin` es el único permiso de LECTURA: habilita la auditoría y la
+  · `es_admin` es un permiso de LECTURA: habilita la auditoría y la
     administración de usuarios. No da permisos de edición sobre los datos —
     administrar y operar se mantienen separados.
+  · `ver_postulantes` es el otro permiso de LECTURA: sin él la pestaña
+    Postulantes ni aparece. El registro de entrevistas tiene notas delicadas
+    de gente que en su mayoría nunca entró a la empresa. Ser admin no lo
+    incluye.
 """
 
 from __future__ import annotations
@@ -326,12 +330,24 @@ def current_user() -> dict | None:
 def es_admin() -> bool:
     """True si el usuario administra la plataforma.
 
-    Es el único permiso de LECTURA: habilita la auditoría y la administración de
+    Es un permiso de LECTURA: habilita la auditoría y la administración de
     usuarios. No da permisos de edición sobre los datos — administrar y operar
-    se mantienen separados.
+    se mantienen separados — ni acceso a Postulantes.
     """
     u = current_user()
     return bool(u and u.get("es_admin"))
+
+
+def puede_ver_postulantes() -> bool:
+    """True si el usuario puede ver el registro de entrevistas a postulantes.
+
+    A diferencia del resto de las secciones, ésta no es visible para todos: las
+    notas tienen datos delicados de postulantes. El mismo permiso habilita
+    actualizar el registro desde Access. Se administra desde la pestaña Usuarios
+    y ser admin no lo incluye.
+    """
+    u = current_user()
+    return bool(u and u.get("ver_postulantes"))
 
 
 def puede_ver_auditoria() -> bool:
