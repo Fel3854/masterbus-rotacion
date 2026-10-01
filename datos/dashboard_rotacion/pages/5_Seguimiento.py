@@ -11,7 +11,8 @@ import streamlit.components.v1 as components
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 from utils import (cargar_datos, cargar_empleados_activos, chart_base,  # noqa: E402
-                   delta_html, get_supabase, COLOR_PRIMARY, COLOR_SECONDARY)
+                   delta_html, get_supabase, leer_paginado,
+                   COLOR_PRIMARY, COLOR_SECONDARY)
 from auth import can_edit, current_user  # noqa: E402
 import auditoria
 import seguimiento as sg  # noqa: E402
@@ -369,15 +370,16 @@ def _leer() -> pd.DataFrame:
     """Todas las entrevistas. Sin parámetros: la tabla entera entra en memoria
     (~85 filas/año), así el caché se invalida con _leer.clear() y nunca hace
     falta el st.cache_data.clear() global (que volaría el caché de la API)."""
-    resp = (
+    # Paginado: la API entrega como mucho 1000 filas por consulta, sin avisar.
+    datos = leer_paginado(lambda: (
         get_supabase().table(sg.TABLA)
-        .select(",".join(sg.columnas_db()))
+        .select(",".join(sg.columnas_db()), count="exact")
         .order("fecha_entrevista", desc=True)
-        .execute()
-    )
-    if not resp.data:
+        .order("id")              # desempate: la paginación necesita un orden único
+    ))
+    if not datos:
         return pd.DataFrame(columns=sg.columnas_db())
-    df = pd.DataFrame(resp.data)
+    df = pd.DataFrame(datos)
     for col in ("fecha_entrevista", "fecha_ingreso", "fecha_proximo_seguimiento"):
         if col in df.columns:
             df[col] = pd.to_datetime(df[col], errors="coerce").dt.date

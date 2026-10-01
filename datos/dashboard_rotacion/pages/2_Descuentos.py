@@ -9,7 +9,7 @@ from dateutil.relativedelta import relativedelta
 
 import sys
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
-from utils import cargar_empleados_activos, get_supabase, slug_empleador, COLOR_PRIMARY, COLOR_SECONDARY
+from utils import cargar_empleados_activos, get_supabase, leer_paginado, slug_empleador, COLOR_PRIMARY, COLOR_SECONDARY
 import auditoria
 from auth import can_edit
 
@@ -264,18 +264,27 @@ def _guardar(legajo, apenom, empleador, tipo, fecha, monto, motivo,
     }).execute()
 
 
+def _orden(consulta, columna_fecha: str):
+    """Del más nuevo al más viejo, con un orden único.
+
+    La fecha sola admite empates y la lectura va paginada (la API entrega como
+    mucho 1000 filas por consulta, sin avisar): sin desempate, una fila se
+    repite y otra se pierde. Dentro del mismo día va primero lo último cargado.
+    """
+    return (consulta.order(columna_fecha, desc=True)
+            .order("fecha_registro", desc=True).order("id"))
+
+
 def _leer(desde: date, hasta: date) -> pd.DataFrame:
-    resp = (
+    datos = leer_paginado(lambda: _orden(
         get_supabase().table(TABLA)
-        .select("id,legajo,apenom,empleador,tipo_descuento,fecha_descuento,monto,motivo,grupo_id,cuota_numero,cuotas_total,monto_total")
+        .select("id,legajo,apenom,empleador,tipo_descuento,fecha_descuento,monto,motivo,grupo_id,cuota_numero,cuotas_total,monto_total", count="exact")
         .gte("fecha_descuento", str(desde))
-        .lte("fecha_descuento", str(hasta))
-        .order("fecha_descuento", desc=True)
-        .execute()
-    )
-    if not resp.data:
+        .lte("fecha_descuento", str(hasta)),
+        "fecha_descuento"))
+    if not datos:
         return pd.DataFrame(columns=["id","legajo","apenom","empleador","tipo_descuento","fecha_descuento","monto","motivo","grupo_id","cuota_numero","cuotas_total","monto_total"])
-    df = pd.DataFrame(resp.data)
+    df = pd.DataFrame(datos)
     df["fecha_descuento"] = pd.to_datetime(df["fecha_descuento"]).dt.date
     return df
 
@@ -297,17 +306,15 @@ def _eliminar_grupo(grupo_id: str, detalle: str = "", cuotas: int = 0):
 
 def _leer_adelantos(desde: date, hasta: date) -> pd.DataFrame:
     cols = ["id","legajo","apenom","empleador","tipo_descuento","fecha_descuento","monto","motivo","grupo_id","cuota_numero","cuotas_total","monto_total"]
-    resp = (
+    datos = leer_paginado(lambda: _orden(
         get_supabase().table("adelantos")
-        .select("id,legajo,apenom,empleador,fecha_adelanto,monto,motivo")
+        .select("id,legajo,apenom,empleador,fecha_adelanto,monto,motivo", count="exact")
         .gte("fecha_adelanto", str(desde))
-        .lte("fecha_adelanto", str(hasta))
-        .order("fecha_adelanto", desc=True)
-        .execute()
-    )
-    if not resp.data:
+        .lte("fecha_adelanto", str(hasta)),
+        "fecha_adelanto"))
+    if not datos:
         return pd.DataFrame(columns=cols)
-    df = pd.DataFrame(resp.data)
+    df = pd.DataFrame(datos)
     df["fecha_descuento"] = pd.to_datetime(df["fecha_adelanto"]).dt.date
     df["tipo_descuento"] = "Adelanto de Sueldo"
     df["grupo_id"] = None
@@ -319,15 +326,12 @@ def _leer_adelantos(desde: date, hasta: date) -> pd.DataFrame:
 
 def _stats_mes() -> dict:
     hoy = date.today()
-    resp = (
+    data = leer_paginado(lambda: _orden(
         get_supabase().table(TABLA)
-        .select("monto,apenom,fecha_descuento,tipo_descuento")
+        .select("monto,apenom,fecha_descuento,tipo_descuento", count="exact")
         .gte("fecha_descuento", str(hoy.replace(day=1)))
-        .lte("fecha_descuento", str(hoy))
-        .order("fecha_descuento", desc=True)
-        .execute()
-    )
-    data = resp.data or []
+        .lte("fecha_descuento", str(hoy)),
+        "fecha_descuento"))
     total = sum(r["monto"] for r in data)
     return {"count": len(data), "total": total, "ultimo": data[0] if data else None}
 

@@ -8,6 +8,9 @@ import streamlit as st
 from datetime import datetime
 from supabase import create_client, Client
 
+# Las lecturas que pueden pasar las 1000 filas van por acá (ver paginado.py).
+from paginado import leer_paginado  # noqa: F401
+
 logger = logging.getLogger(__name__)
 
 API_URL = "https://traficonuevo.masterbus.net/api/v1/auto/e"

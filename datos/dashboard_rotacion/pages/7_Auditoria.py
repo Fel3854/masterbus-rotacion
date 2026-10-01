@@ -10,12 +10,15 @@ import streamlit as st
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 from auth import puede_ver_auditoria  # noqa: E402
-from utils import inyectar_css_base, get_supabase  # noqa: E402
+from utils import inyectar_css_base, get_supabase, leer_paginado  # noqa: E402
 import auditoria as au  # noqa: E402
 
 _esc = html.escape
 
 DIAS_DEFECTO = 30
+# La lista dibuja un renglón por movimiento: más que esto vuelve lenta la
+# pantalla. Si el período tiene más, se avisa en vez de recortar en silencio.
+MAX_MOVIMIENTOS = 5000
 
 inyectar_css_base()
 st.markdown("""
@@ -74,18 +77,25 @@ if not puede_ver_auditoria():
 
 @st.cache_data(ttl=120, show_spinner=False)
 def _leer(desde: date, hasta: date) -> pd.DataFrame:
-    """Movimientos del período. Se filtra en la base: el log crece sin techo."""
-    resp = (
-        get_supabase().table(au.TABLA)
-        .select(",".join(au.COLUMNAS))
-        .gte("fecha", desde.isoformat())
-        # `hasta` es un día completo: el rango va hasta el arranque del siguiente.
-        .lt("fecha", (hasta + timedelta(days=1)).isoformat())
-        .order("fecha", desc=True)
-        .limit(5000)
-        .execute()
-    )
-    return pd.DataFrame(resp.data or [], columns=au.COLUMNAS)
+    """Movimientos del período. Se filtra en la base: el log crece sin techo.
+
+    Va paginado: la API entrega como mucho 1000 filas por consulta y no avisa
+    cuando corta (el `.limit(5000)` que había acá recibía 1000). Trae uno más
+    que el máximo para poder avisar cuando el período no entra entero.
+    """
+    def consulta():
+        return (
+            get_supabase().table(au.TABLA)
+            .select(",".join(au.COLUMNAS), count="exact")
+            .gte("fecha", desde.isoformat())
+            # `hasta` es un día completo: el rango va hasta el arranque del siguiente.
+            .lt("fecha", (hasta + timedelta(days=1)).isoformat())
+            .order("fecha", desc=True)
+            .order("id")          # desempate: sin orden único la paginación repite filas
+        )
+
+    return pd.DataFrame(leer_paginado(consulta, tope=MAX_MOVIMIENTOS + 1),
+                        columns=au.COLUMNAS)
 
 
 c1, c2 = st.columns([1, 1])
@@ -99,11 +109,20 @@ if desde > hasta:
     st.error("La fecha «Desde» no puede ser posterior a «Hasta».")
     st.stop()
 
-df = au.normalizar(_leer(desde, hasta))
+crudo = _leer(desde, hasta)
+# Viene del más nuevo al más viejo: si sobra, lo que queda afuera es lo más viejo.
+RECORTADO = len(crudo) > MAX_MOVIMIENTOS
+df = au.normalizar(crudo.head(MAX_MOVIMIENTOS))
 
 if df.empty:
     st.info("No hay movimientos registrados en el período seleccionado.")
     st.stop()
+
+if RECORTADO:
+    st.warning(
+        f"El período tiene más de {MAX_MOVIMIENTOS:,} movimientos: se muestran los "
+        f"{MAX_MOVIMIENTOS:,} más recientes y los totales de abajo son parciales. "
+        "Acotá las fechas para verlos todos.".replace(",", "."))
 
 # ─── KPIs ─────────────────────────────────────────────────────
 escrituras = int(df["es_escritura"].sum())

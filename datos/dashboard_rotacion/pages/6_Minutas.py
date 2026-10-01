@@ -10,7 +10,7 @@ import streamlit as st
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 from auth import can_edit, current_user  # noqa: E402
-from utils import inyectar_css_base, get_supabase  # noqa: E402
+from utils import inyectar_css_base, get_supabase, leer_paginado  # noqa: E402
 import auditoria
 import minutas as mn  # noqa: E402
 
@@ -61,15 +61,16 @@ st.markdown("""
 def _leer() -> pd.DataFrame:
     """Todas las minutas. La tabla entera entra en memoria, así el caché se
     invalida con `_leer.clear()` sin volar el caché de la API de empleados."""
-    resp = (
+    # Paginado: la API entrega como mucho 1000 filas por consulta, sin avisar.
+    datos = leer_paginado(lambda: (
         get_supabase().table(mn.TABLA)
-        .select(",".join(mn.columnas_db()))
+        .select(",".join(mn.columnas_db()), count="exact")
         .order("fecha_limite", desc=False)
-        .execute()
-    )
-    if not resp.data:
+        .order("id")              # desempate: la paginación necesita un orden único
+    ))
+    if not datos:
         return pd.DataFrame(columns=mn.columnas_db())
-    df = pd.DataFrame(resp.data)
+    df = pd.DataFrame(datos)
     for col in ("fecha", "fecha_limite"):
         if col in df.columns:
             df[col] = pd.to_datetime(df[col], errors="coerce").dt.date

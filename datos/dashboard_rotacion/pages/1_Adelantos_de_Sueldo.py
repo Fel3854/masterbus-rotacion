@@ -7,7 +7,7 @@ from datetime import date
 
 import sys
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
-from utils import cargar_empleados_activos, get_supabase, slug_empleador, COLOR_PRIMARY, COLOR_SECONDARY
+from utils import cargar_empleados_activos, get_supabase, leer_paginado, slug_empleador, COLOR_PRIMARY, COLOR_SECONDARY
 import auditoria
 from auth import can_edit
 import santander
@@ -242,18 +242,27 @@ def _guardar(legajo, apenom, empleador, fecha, monto, motivo):
     )
 
 
+def _orden(consulta):
+    """Del más nuevo al más viejo, con un orden único.
+
+    La fecha sola admite empates y la lectura va paginada (la API entrega como
+    mucho 1000 filas por consulta, sin avisar): sin desempate, una fila se
+    repite y otra se pierde. Dentro del mismo día va primero lo último cargado.
+    """
+    return (consulta.order("fecha_adelanto", desc=True)
+            .order("fecha_registro", desc=True).order("id"))
+
+
 def _leer(desde: date, hasta: date) -> pd.DataFrame:
-    resp = (
+    datos = leer_paginado(lambda: _orden(
         get_supabase().table(TABLA)
-        .select("id,legajo,apenom,empleador,fecha_adelanto,monto,motivo")
+        .select("id,legajo,apenom,empleador,fecha_adelanto,monto,motivo", count="exact")
         .gte("fecha_adelanto", str(desde))
         .lte("fecha_adelanto", str(hasta))
-        .order("fecha_adelanto", desc=True)
-        .execute()
-    )
-    if not resp.data:
+    ))
+    if not datos:
         return pd.DataFrame(columns=["id","legajo","apenom","empleador","fecha_adelanto","monto","motivo"])
-    df = pd.DataFrame(resp.data)
+    df = pd.DataFrame(datos)
     df["fecha_adelanto"] = df["fecha_adelanto"].apply(lambda x: pd.to_datetime(x).date())
     return df
 
@@ -265,15 +274,12 @@ def _eliminar(record_id: str, detalle: str = ""):
 
 def _stats_mes() -> dict:
     hoy = date.today()
-    resp = (
+    data: list[dict] = leer_paginado(lambda: _orden(
         get_supabase().table(TABLA)
-        .select("monto,apenom,fecha_adelanto")
+        .select("monto,apenom,fecha_adelanto", count="exact")
         .gte("fecha_adelanto", str(hoy.replace(day=1)))
         .lte("fecha_adelanto", str(hoy))
-        .order("fecha_adelanto", desc=True)
-        .execute()
-    )
-    data: list[dict] = resp.data or []  # type: ignore[assignment]
+    ))
     total_monto = sum(r["monto"] for r in data)
     ultimo = data[0] if data else None
     return {"count": len(data), "total": total_monto, "ultimo": ultimo}
