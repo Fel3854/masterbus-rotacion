@@ -1327,7 +1327,8 @@ def test_guardar_edicion_escribe_el_campo_cambiado_y_deja_el_resto():
     editado = _editada(editado, 2, dni="22.333.445")
     resultado = pt.guardar_edicion(cliente, pt.plan_de_edicion(base, editado), "Ana", ahora=AHORA)
 
-    assert resultado == {"guardadas": 2, "por_campo": {"sector": 2, "dni": 1}, "conflictos": []}
+    assert resultado == {"guardadas": 2, "numeros": [1, 2],
+                         "por_campo": {"sector": 2, "dni": 1}, "conflictos": []}
     assert cliente.fila(1)["sector"] == "TRAFICO" and cliente.fila(1)["observaciones"] == "PREOCU"
     assert cliente.fila(2)["dni"] == 22333445 and cliente.fila(2)["editado_por"] == "Ana"
     assert cliente.fila(3)["sector"] == "Taller" and cliente.fila(3)["editado_por"] is None
@@ -1365,7 +1366,8 @@ def test_repetir_un_guardado_no_escribe_de_nuevo_ni_inventa_conflictos():
     cliente.fila(1)["sector"] = "X"                    # la primera pasada llegó a guardar ésta
     resultado = pt.guardar_edicion(cliente, plan, "Ana")
 
-    assert resultado == {"guardadas": 1, "por_campo": {"sector": 1}, "conflictos": []}
+    assert resultado == {"guardadas": 1, "numeros": [2],
+                         "por_campo": {"sector": 1}, "conflictos": []}
     assert [numeros for _v, numeros in cliente.updates] == [[2]]
     assert pt.guardar_edicion(cliente, plan, "Ana")["guardadas"] == 0
 

@@ -637,8 +637,9 @@ def advertencias_de_carga(plan) -> list:
                    else f"le faltan {faltan} entrevistas que ya están")
         avisos.append(
             f"Al archivo {cuantas} en el dashboard. Suele pasar cuando se sube "
-            "una copia vieja de la base: si seguís, las que cambiaron después "
-            "vuelven a su versión anterior.")
+            "una copia vieja de la base: si seguís, las que el archivo trae "
+            "distintas vuelven a esa versión. Lo que se cargó o editó en el "
+            "dashboard no se pisa.")
     modificadas = len(plan["modificadas"])
     if plan["en_base"] and modificadas / plan["en_base"] > UMBRAL_CAMBIO_MASIVO:
         avisos.append(
@@ -969,7 +970,9 @@ def guardar_edicion(client, modificadas, usuario, ahora=None) -> dict:
     Relee esas entrevistas, deja afuera las celdas que otra persona cambió
     mientras tanto y escribe el resto campo por campo. Devuelve:
       · guardadas   cuántas entrevistas se modificaron.
-      · por_campo   {campo: cuántas entrevistas}. Es lo que va a la auditoría.
+      · numeros     cuáles. Con `por_campo` es lo que va a la auditoría: qué
+                    se tocó, nunca con qué valor.
+      · por_campo   {campo: cuántas entrevistas}.
       · conflictos  [(numero, campo)] que NO se guardaron.
     Si falla a mitad de camino se puede repetir: lo que ya entró no se vuelve a
     escribir ni aparece como conflicto.
@@ -981,7 +984,8 @@ def guardar_edicion(client, modificadas, usuario, ahora=None) -> dict:
     for campos in aplicables.values():
         for campo in campos:
             por_campo[campo] = por_campo.get(campo, 0) + 1
-    return {"guardadas": len(aplicables), "por_campo": por_campo, "conflictos": conflictos}
+    return {"guardadas": len(aplicables), "numeros": sorted(aplicables),
+            "por_campo": por_campo, "conflictos": conflictos}
 
 
 def marcar_anulada(client, numero, anulada, usuario, ahora=None) -> None:
