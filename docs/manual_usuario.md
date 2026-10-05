@@ -144,11 +144,14 @@ Todo lo de esta pestaña es agregado: **no aparecen nombres**.
 
 ## 6. Postulantes: registro de entrevistas
 
-Esta pestaña sirve para consultar el **registro de entrevistas a postulantes (FORM 045 02)**: todas las personas entrevistadas desde 2007, con el puesto, el sector y lo que anotó quien las entrevistó. La pregunta que mejor responde es: *¿esta persona ya se presentó antes, y qué pasó esa vez?*
+Esta pestaña es el **registro de entrevistas a postulantes (FORM 045 02)**: todas las personas entrevistadas desde 2007, con el puesto, el sector y lo que anotó quien las entrevistó. La pregunta que mejor responde es: *¿esta persona ya se presentó antes, y qué pasó esa vez?*
 
-**Las entrevistas se siguen cargando en Access**, como siempre. El dashboard guarda una copia para consultar, que se pone al día subiendo el archivo de Access (ver más abajo).
+**El registro se carga y se corrige acá.** Ya no hace falta Access: las entrevistas nuevas se cargan desde la pestaña *Nueva entrevista* y las que ya están se corrigen desde su ficha o de a muchas a la vez.
 
-**Quién la ve:** sólo los usuarios con el permiso *Postulantes*. Para el resto, la pestaña no aparece en el menú. Es la única sección que no ven todos, porque las notas incluyen datos delicados de personas que en su mayoría nunca entraron a la empresa.
+**Quién la ve y quién carga.** Son dos permisos distintos:
+
+- *Postulantes*: ver la pestaña, buscar y descargar. Para el resto, la pestaña no aparece en el menú. Es la única sección que no ven todos, porque las notas incluyen datos delicados de personas que en su mayoría nunca entraron a la empresa.
+- *Postulantes: cargar y editar*: además aparecen las pestañas *Nueva entrevista*, *Editar en lote* e *Importar archivo*, y en la ficha de cada entrevista el botón para editarla o anularla.
 
 ### Buscar
 
@@ -156,6 +159,7 @@ Arriba de todo hay una sola caja de búsqueda. Escribí lo que sepas:
 
 - **Apellido y/o nombre**, en cualquier orden: `perez juan` o `juan perez`.
 - **DNI**, con o sin puntos: `30123456` o `30.123.456`.
+- **Legajo**, si la persona terminó ingresando: `4821`.
 - **Palabras de las notas**: `stand by`, `prueba de manejo`, `preocu`.
 
 No importan las mayúsculas ni las tildes. Si escribís varias palabras, tienen que estar todas. Cada palabra busca por el comienzo: `paz` encuentra PAZ y PAZOS, pero no CAPAZ.
@@ -165,7 +169,7 @@ No importan las mayúsculas ni las tildes. Si escribís varias palabras, tienen 
 - **Puesto**: agrupado por familias. «Conductor» junta CHOFER, CONDUCTOR y todas sus variantes de tipeo, así no hay que elegirlas una por una.
 - **Sector / base** y **Entrevistador**: también unifican las distintas formas en que se escribió lo mismo.
 - **Desde / Hasta**: opcional. Si ponés fechas, las entrevistas que no tienen fecha cargada quedan afuera.
-- **Mostrar solo**: marcados aptos, con notas, o personas que se presentaron más de una vez.
+- **Mostrar solo**: marcados aptos, con notas, personas que se presentaron más de una vez, **ingresó (con legajo)** y **DNI a revisar** (ver *Legajo*, más abajo). Quien puede cargar tiene además **Anuladas**.
 - **Limpiar filtros** vuelve todo a cero.
 
 La búsqueda y los filtros se combinan, y valen tanto para la lista como para el Resumen.
@@ -179,33 +183,89 @@ Las entrevistas aparecen de la más nueva a la más vieja. La columna **Veces** 
 - Si con ese DNI hay registros con **apellidos distintos**, la ficha lo advierte. Puede ser el mismo apellido mal tipeado o un DNI mal cargado: mirá los nombres antes de sacar conclusiones.
 - Si la entrevista **no tiene DNI**, no se puede armar el historial. Buscá por apellido.
 
+### Legajo: si la persona ingresó
+
+La columna **Legajo** muestra el legajo de MasterBus cuando el postulante figura en el padrón de empleados. No lo carga nadie: se busca solo, cruzando el **DNI y el apellido** de la entrevista con el padrón, y aparece apenas la persona es dada de alta en MasterBus.
+
+- La ficha muestra además el **empleador**, la **fecha de ingreso** y si sigue **activo** o la fecha de **baja**. El número de legajo se repite entre empresas, así que mirá siempre el empleador.
+- El legajo es **de la persona, no de esa entrevista**. Si alguien se presentó en 2015 sin ingresar y entró en 2019, las dos entrevistas muestran el legajo; la fecha de ingreso en la ficha deja ver por cuál entró. Lo mismo al revés: quien ya trabajó acá y se vuelve a presentar aparece con el legajo que tuvo.
+- **Sin DNI no hay legajo**: no hay forma segura de saber que es la misma persona. Si le completás el DNI, aparece.
+- **DNI a revisar**: el DNI de la entrevista es de un empleado, pero **con otro apellido**. Casi siempre es un DNI mal tipeado, así que el legajo no se muestra para no atribuirle a un postulante el empleo de otra persona. El filtro *DNI a revisar* los lista para corregirlos.
+- Si en algún momento no se puede consultar el padrón, la página avisa y la columna queda vacía; todo lo demás sigue funcionando. Probá con **↺ Actualizar**.
+
 ### Qué significa «Apto ✓»
 
-Significa que la casilla *Apto para ingresar* estaba tildada en Access. **Que no tenga tilde no quiere decir que la persona fue rechazada**: desde 2023 la casilla casi no se usa, y el resultado real está en las notas (por ejemplo «OK PREOCU» o «SE ENVIA PROPUESTA»). Por eso la pantalla nunca muestra «No apto» ni calcula porcentajes de rechazo.
+Significa que la casilla *Apto para ingresar* está tildada. **Que no tenga tilde no quiere decir que la persona fue rechazada**: desde 2023 la casilla casi no se usa, y el resultado real está en las notas (por ejemplo «OK PREOCU» o «SE ENVIA PROPUESTA»). Por eso la pantalla nunca muestra «No apto» ni calcula porcentajes de rechazo.
 
 ### Descargar
 
-**⬇ Descargar resultado (Excel)** baja lo que estés viendo, con las mismas columnas del formulario. Cada descarga queda anotada en Auditoría (cuántas entrevistas y con qué filtros, nunca el contenido de las notas).
+**⬇ Descargar resultado (Excel)** baja lo que estés viendo, con las columnas del formulario y, al final, el legajo, el empleador y la fecha de ingreso. Cada descarga queda anotada en Auditoría (cuántas entrevistas y con qué filtros, nunca el contenido de las notas).
 
 ### Resumen
 
 Cuenta lo que dejan pasar la búsqueda y los filtros: entrevistas, personas, cuántas volvieron a presentarse, entrevistas por año y el reparto por puesto, sector y entrevistador.
 
-### Actualizar desde Access
+### Cargar una entrevista nueva
 
-Cuando quieras traer las entrevistas nuevas:
+En la pestaña **Nueva entrevista**:
 
-1. Entrá a la pestaña **Actualizar desde Access**.
-2. Subí **el archivo de Access (`.mdb`)** tal cual está. Si el navegador no te deja elegirlo, cerrá Access y probá de nuevo.
-3. Mirá la vista previa. Te dice cuántas entrevistas son **nuevas**, cuántas **modificadas** (y qué cambió en cada una), cuántas quedan **sin cambios** y cuántas **no están en el archivo**.
-4. Si está bien, **Confirmar actualización**.
+1. **Empezá por el DNI.** Apenas lo escribís, aparecen las entrevistas anteriores de esa persona, si las tiene. Es el momento de mirarlas.
+2. Completá el formulario. El **apellido** es lo único obligatorio.
+3. En **Entrevistador**, **Puesto** y **Sector** elegí de la lista siempre que puedas: son los que ya se usan, y así no se suma otra forma de escribir lo mismo. Si no está, escribilo y apretá `Enter`.
+4. **Guardar entrevista.** El **Nº de orden** lo pone el sistema: es el siguiente al último, y te lo muestra al guardar.
+
+Para tener en cuenta:
+
+- Se puede cargar **sin DNI**, pero esa entrevista no va a tener historial ni legajo.
+- Si ya hay una entrevista de ese DNI **con la misma fecha**, la página frena y te muestra cuál es. Si de verdad es otra, tildá *Es otra entrevista: guardarla igual*.
+- El DNI tiene que tener 7 u 8 dígitos y la fecha no puede ser posterior a hoy.
+
+### Corregir una entrevista
+
+Abrí su ficha (clic en la fila) y desplegá **Editar esta entrevista**. Cambiá lo que haga falta y **Guardar cambios**. Es el camino para lo de todos los días: agregar el resultado a las observaciones, completar un DNI, corregir un apellido.
+
+Se guarda **sólo lo que cambiaste**. Si mientras tenías la ficha abierta otra persona modificó ese mismo dato, el tuyo no lo pisa: la página te avisa y te muestra cómo quedó.
+
+### Anular una entrevista cargada por error
+
+Del registro **no se borra nada**. Una entrevista duplicada o cargada por error se **anula**: en su ficha, *Editar esta entrevista* → **Anular entrevista** (pide confirmación).
+
+Una entrevista anulada deja de verse en la lista y de contar en los totales y en el historial de la persona, pero queda guardada. Para recuperarla: *Mostrar solo* → **Anuladas**, abrís su ficha y **Restaurar entrevista**. Su Nº de orden no se vuelve a usar.
+
+### Editar en lote
+
+Para corregir varias entrevistas de una vez, como en una planilla:
+
+1. Con la búsqueda y los filtros, dejá en el resultado **sólo las que querés tocar**.
+2. Pestaña **Editar en lote** → **Editar … entrevistas del resultado**. Ese grupo queda fijo aunque después cambies los filtros.
+3. Corregí las celdas en la grilla. El Nº de orden no se puede cambiar.
+4. Para poner **el mismo valor en toda una columna** (por ejemplo, unificar «CONDCUTOR», «CHOFER» y «Conductor» en `CONDUCTOR`), abrí *Aplicar un mismo valor a toda una columna*, elegí la columna y el valor, y **Aplicar**. Sirve para entrevistador, puesto, sector, fecha y apto. Apellido, nombres, DNI y las notas son de cada persona: se corrigen celda por celda.
+5. Abajo aparece **Qué se va a guardar**: cada entrevista con el antes → ahora. **Nada se guarda hasta que toques Guardar.**
+6. **Guardar cambios**. Si son más de 50 entrevistas, primero hay que tildar una confirmación.
+
+Para tener en cuenta:
+
+- **Salir sin guardar** descarta todo lo que hiciste en la grilla.
+- Si mientras editabas otra persona cambió alguna de esas mismas celdas, esa no se pisa: se guarda el resto y la página te dice cuáles quedaron sin guardar.
+- Si el guardado se corta por la conexión, volvé a tocar **Guardar**: lo que ya entró no se repite.
+
+### Importar un archivo
+
+La pestaña **Importar archivo** trae un archivo entero: la base de Access (`.mdb`) o un Excel con las columnas del formulario, como el que se descarga desde *Entrevistas*.
+
+1. Subí el archivo.
+2. Mirá la vista previa. Te dice cuántas entrevistas son **nuevas**, cuántas **modificadas** (y qué cambia en cada una), cuántas quedan **sin cambios** y cuántas **no están en el archivo**.
+3. Si está bien, **Confirmar importación**.
 
 Para tener en cuenta:
 
 - **Nunca se borra nada.** Una entrevista que ya está en el dashboard queda aunque no venga en el archivo.
+- **Lo cargado o editado en el dashboard no se pisa.** Si el archivo trae distinta una entrevista que se cargó o se corrigió acá, aparece aparte, en *Editadas acá*, con el detalle de qué cambiaría. Sólo se pisa si tildás expresamente esa opción.
 - **Se puede repetir sin miedo.** Subir dos veces el mismo archivo no duplica nada.
-- Si el archivo es una **copia vieja** de la base, o si cambia demasiadas entrevistas de golpe, aparece un aviso y hay que tildar una confirmación para seguir. Ante la duda, no confirmes y revisá que sea el archivo correcto.
+- Si al archivo le faltan entrevistas o cambia demasiadas de golpe, aparece un aviso y hay que tildar una confirmación para seguir. Ante la duda, no confirmes.
 - **Si el `.mdb` no se puede leer**, exportá la tabla a Excel y subí ese archivo: en Access, clic derecho sobre la tabla *FORM 045 02 REGISTRO DE ENTREVISTAS A POSTULANTES* → **Exportar** → **Excel**, sin cambiar los nombres de las columnas.
+
+**El pase desde Access se hace una sola vez.** Antes de cargar la primera entrevista en el dashboard hay que subir la base de Access por última vez, y desde ahí no cargar más en Access. Si alguien carga después una entrevista en Access, le va a tocar un Nº de orden que el dashboard ya usó para otra persona: al importar, esa entrevista aparece en *Editadas acá* y no entra. Hay que cargarla a mano desde *Nueva entrevista*.
 
 ---
 
@@ -216,9 +276,9 @@ Todo movimiento que cambia datos queda registrado. La pestaña **Auditoría** mu
 ### Qué se registra
 | Acción | Cuándo se anota |
 |---|---|
-| **Alta** | Se carga un adelanto, un descuento, una entrevista o una minuta |
-| **Baja** | Se elimina cualquiera de esos registros |
-| **Cambio** | Se edita una minuta o se cambia su estado, o se actualiza el registro de Postulantes desde Access |
+| **Alta** | Se carga un adelanto, un descuento, una entrevista de seguimiento, una minuta o una entrevista de un postulante |
+| **Baja** | Se elimina cualquiera de esos registros, o se anula una entrevista de Postulantes |
+| **Cambio** | Se edita una minuta o se cambia su estado. En Postulantes: se edita una entrevista (o varias en lote), se restaura una anulada o se importa un archivo |
 | **Exportación** | Se descarga el Excel del Santander (lleva CUIL y CBU), entrevistas de Seguimiento o el registro de Postulantes |
 | **Usuarios** | Se crea un usuario, se le cambian los permisos, se le resetea la contraseña o se lo desactiva |
 | **Lectura sensible** | Alguien abre una entrevista y ve las respuestas textuales del conductor |
@@ -226,7 +286,7 @@ Todo movimiento que cambia datos queda registrado. La pestaña **Auditoría** mu
 
 De cada movimiento queda: fecha y hora, usuario, módulo, acción y un detalle legible (por ejemplo *"MARTINEZ JUAN (leg. 4821) · 15/09/2026 · $ 50.000"*).
 
-**Lo que NO se registra:** el contenido de las respuestas de las entrevistas. Queda anotado que alguien la abrió, nunca lo que el conductor dijo. Si el textual se copiara al registro, el permiso que lo protege no serviría de nada. Lo mismo vale para Postulantes: se anota cuántas entrevistas se descargaron o actualizaron, nunca sus notas.
+**Lo que NO se registra:** el contenido de las respuestas de las entrevistas. Queda anotado que alguien la abrió, nunca lo que el conductor dijo. Si el textual se copiara al registro, el permiso que lo protege no serviría de nada. Lo mismo vale para Postulantes: se anota qué entrevistas se tocaron y qué campos (por ejemplo *"Editó 12 entrevistas en lote — Sector: 12"*), nunca con qué valor ni el contenido de las notas.
 
 ### Cómo usarla
 - **Movimientos**: la lista cronológica, agrupada por día. Se puede filtrar por usuario, por módulo, buscar texto en el detalle, o tildar *"Solo movimientos que cambiaron datos"* para sacar del medio los ingresos y salidas.
@@ -248,7 +308,7 @@ Hay una regla general y tres excepciones:
 - **Todos ven todas las secciones.** Los permisos sólo habilitan *cargar, editar y eliminar*.
 - **Excepción 1:** el permiso de *Seguimiento* además habilita ver las respuestas textuales de las entrevistas, que son confidenciales. Dárselo a alguien es dejarlo leer lo que el conductor dijo bajo promesa de confidencialidad.
 - **Excepción 2:** *Administrador* es un permiso de lectura. Habilita Auditoría y Usuarios, y **no** habilita cargar datos: administrar y operar se mantienen separados a propósito.
-- **Excepción 3:** *Postulantes* es el otro permiso de lectura. Sin él, la pestaña Postulantes ni aparece. El mismo permiso habilita actualizar el registro desde Access. Ser administrador **no** lo incluye: si un admin lo necesita, se lo tilda como a cualquier otro usuario, y ese cambio queda en la Auditoría.
+- **Excepción 3:** *Postulantes* es el otro permiso de lectura. Sin él, la pestaña Postulantes ni aparece. Sólo deja ver, buscar y descargar: para cargar, editar, anular o importar hace falta además *Postulantes: cargar y editar*, que incluye el de ver (si tildás sólo ése, se guarda con los dos). Ser administrador **no** incluye ninguno: si un admin lo necesita, se lo tilda como a cualquier otro usuario, y ese cambio queda en la Auditoría.
 
 ### Dar de alta a alguien
 1. Pestaña **Nuevo usuario**.

@@ -80,7 +80,7 @@ Se abre en el navegador en `http://localhost:8501`
 | Vencimientos | Control de documentación y habilitaciones próximas a vencer |
 | **Seguimiento** | **Entrevista de seguimiento del 2° mes de cada conductor: carga tabulada, cola de pendientes e indicadores de adaptación** |
 | Minutas Reunión | Temas y acciones de RRHH con estado y fecha límite |
-| Postulantes | Consulta del registro de entrevistas a postulantes (FORM 045 02), alimentado desde Access. Sólo con permiso `ver_postulantes` |
+| Postulantes | Registro de entrevistas a postulantes (FORM 045 02): consulta con `ver_postulantes`; alta, edición, anulación e importación con `edit_postulantes` |
 | Auditoría | Registro de movimientos de los usuarios (`auditoria.py`). Sólo admin; tabla append-only |
 | Usuarios | Alta, permisos y contraseñas (`usuarios.py`). Sólo admin |
 | Manual de Usuario | Renderiza `automatizaciones/docs/manual_usuario.md` |
@@ -133,30 +133,98 @@ Ojo con el volumen: la apertura de la vista ampliada se audita al SETEAR
 
 ### Postulantes
 
-`postulantes.py` + `pages/9_Postulantes.py` + `migration_entrevistas_postulantes.sql` + `tests/test_postulantes.py`.
+`postulantes.py` + `pages/9_Postulantes.py` + `migration_entrevistas_postulantes.sql` + `migration_postulantes_edicion.sql` + `tests/test_postulantes.py`.
 
-Consulta del registro de entrevistas a postulantes (FORM 045 02). **Access sigue
-siendo donde se carga**; la tabla `entrevistas_postulantes` es su copia y se pone
-al día subiendo el archivo desde la pestaña «Actualizar desde Access» (upsert por
-`numero_orden`, el autonumérico de Access).
+Registro de entrevistas a postulantes (FORM 045 02). Nació como copia de consulta
+de una base de Access; **desde 2026-10 se carga y se corrige en el dashboard** y
+Access quedó sólo como origen de lo histórico. La tabla es
+`entrevistas_postulantes`, con clave `numero_orden`.
 
-- **Se guarda crudo, se deriva al leer.** La tabla tiene el dato tal cual viene,
-  con sus typos. Familia de puesto (161 variantes → 9 familias), sector
-  normalizado, entrevistador unificado y «veces que se presentó» se calculan en
-  `enriquecer()` y no se guardan.
+Lo que no cambió:
+
+- **Se guarda crudo, se deriva al leer.** La tabla tiene el dato tal cual se
+  cargó, con sus typos. Familia de puesto (161 variantes → 9 familias), sector
+  normalizado, entrevistador unificado, «veces que se presentó» y legajo se
+  calculan en `enriquecer()` / `cruzar_legajos()` y no se guardan.
 - **`apto` sólo significa algo en TRUE.** Desde 2023 la casilla casi no se tilda
   (2 % en 2025, con «OK PREOCU» en las notas). FALSE es "sin marcar", no
   "rechazado": la pantalla nunca muestra «No apto» ni calcula tasas de rechazo, y
   hay un test que lo protege.
 - **El DNI 0 o vacío nunca agrupa.** 263 entrevistas no tienen DNI; si el 0
   agrupara serían una sola "persona". El historial es estrictamente por DNI válido.
-- **Permiso `ver_postulantes`**: es de LECTURA (la pestaña no aparece sin él) y
-  además habilita actualizar. No lo arrastra `es_admin`. Es la única sección de
-  datos que no ven todos, porque las notas tienen datos delicados.
 - **RLS sin DELETE**: policies de SELECT, INSERT y UPDATE; ni DELETE ni FOR ALL.
-  La app suma y corrige, nunca borra. Con test sobre el DDL.
+  Con test sobre los dos DDL.
 - **Lectura paginada**: `leer_todo()` usa `paginado.leer_paginado` (ver «Lecturas
   a Supabase» más abajo).
+- **Datos reales fuera del repo**: los tests usan nombres y DNI inventados. El
+  `.mdb` y sus exports no se versionan.
+
+Permisos (`usuarios.PERMISOS`):
+
+- **`ver_postulantes`** es de LECTURA: sin él la pestaña ni aparece. No lo
+  arrastra `es_admin`. Es la única sección de datos que no ven todos, porque las
+  notas tienen datos delicados.
+- **`edit_postulantes`** habilita cargar, editar, anular e importar
+  (`can_edit("postulantes")`). Implica ver: `usuarios.con_dependencias()` lo
+  guarda siempre junto con `ver_postulantes`.
+
+Legajo (`preparar_empleados`, `apellido_compatible`, `cruzar_legajos`):
+
+- **Cruce por DNI + apellido** contra el padrón de la API
+  (`utils.cargar_empleados_cruce`, todos los empleadores, caché propio de 1 h con
+  sólo las columnas del cruce). El DNI solo no alcanza: uno mal tipeado puede
+  caer en el de otro empleado. Apellido compatible = idéntico sin tildes, o
+  comparte una palabra, o se parece ≥ 0,8 (`difflib`).
+- **DNI de un empleado con otro apellido → `revisar`, sin legajo.** Medido contra
+  producción el 2026-10-05: de 2.572 entrevistas con DNI cruzan 998; 982 con
+  apellido compatible y 16 a revisar.
+- **El legajo es de la persona, no de la entrevista.** Con varios empleos se toma
+  el primero que empezó desde la entrevista (7 días de margen); si no hay, el más
+  reciente. La ficha muestra empleador e ingreso porque el legajo se repite entre
+  empresas.
+- **Si la API no responde la página sigue**: columna vacía y aviso. No se corta
+  como Adelantos, porque acá el padrón es un agregado.
+
+Escritura (todo recibe el cliente por parámetro y tiene test con un cliente falso):
+
+- **Un alta es un INSERT, nunca un upsert** (`insertar`). El número es
+  `max + 1` leído de la base al guardar; si otra persona lo tomó, el INSERT choca
+  y se reintenta con el siguiente. Un upsert reemplazaría a una persona por otra.
+- **Se escribe sólo la celda que cambió** (`plan_de_edicion` → `guardar_edicion`).
+  `plan_de_edicion` reusa el comparador de la importación (`plan_de_carga`), así
+  que las diferencias de formato no cuentan. Los cambios iguales se agrupan en un
+  solo `update(...).in_("numero_orden", lote)`.
+- **Antes de escribir se relee** (`separar_conflictos`): una celda que otra
+  persona cambió mientras tanto no se pisa y se avisa; una que ya tiene el valor
+  pedido se saltea, así repetir un guardado que se cortó no escribe dos veces.
+- **`aplicar_cambios` falla si la base tocó menos filas de las pedidas.**
+  PostgREST no da error cuando un UPDATE no alcanza ninguna fila.
+- **Anular, no borrar** (`marcar_anulada`): `anulada = TRUE`. Las anuladas no
+  cuentan en «veces», ni en el historial, ni en los totales; se ven con el filtro
+  «Anuladas» y se restauran. El número no se reutiliza.
+- **Sellos**: una carga o edición a mano escribe `editado_por`, `fecha_edicion` y
+  `fecha_actualizacion` con el mismo instante. `importado_por` es sólo de las
+  importaciones. Con eso `ultima_actualizacion()` sabe a quién atribuir el
+  último cambio.
+- **Historial en la base**: el trigger `guardar_version_entrevista` copia la fila
+  anterior a `entrevistas_postulantes_historial` en cada UPDATE que cambia un dato
+  (hay un test que exige que la condición del trigger nombre todos los campos del
+  formulario). Esa tabla tiene RLS **sin policies**: la app no la lee ni la
+  escribe. Sin Access, esta base es la única copia del registro; restaurar una
+  versión es, por ahora, a mano desde el SQL Editor.
+- **Auditoría**: alta (Nº), cambio (Nº o cantidad, números y nombres de campos),
+  baja al anular, importación (cantidades y archivo), exportación (cantidad y
+  filtros). **Nunca valores**: el admin ve la auditoría sin tener `ver_postulantes`.
+
+Importación (`leer_archivo` → `normalizar_archivo` → `plan_de_carga` → `upsert`):
+
+- **No pisa lo hecho a mano**: `plan_de_carga(..., proteger_editadas=True)` manda
+  a `protegidas` las filas que el archivo trae distintas y tienen `fecha_edicion`.
+  Sólo entran con `a_cargar(plan, pisar_protegidas=True)`, que en pantalla es un
+  tilde. Cubre subir un `.mdb` viejo y el choque de números (una entrevista
+  cargada en Access después del pase tiene un Nº que acá es de otra persona).
+- **Dos frenos antes de confirmar** (`advertencias_de_carga`): al archivo le
+  faltan entrevistas que ya están, o cambia más del 20 % de lo cargado.
 - **Lectura del `.mdb`**: `access-parser` (Python puro) con dos correcciones
   aplicadas al objeto de la tabla en `_leer_mdb()`: una fecha con bytes inválidos
   es un vacío, y cada columna de texto se lee de su `variable_column_number`. Sin
@@ -165,13 +233,29 @@ al día subiendo el archivo desde la pestaña «Actualizar desde Access» (upser
   `requirements.txt`. Para revalidar tras cambiarla:
   `POSTULANTES_MDB=… POSTULANTES_CSV=… python3 -m pytest tests/test_postulantes.py -k mdb`
   (compara el `.mdb` real contra su export de referencia; tiene que dar 0 diferencias).
-- **Dos frenos antes de confirmar una carga** (`advertencias_de_carga`): al
-  archivo le faltan entrevistas que ya están (copia vieja), o cambia más del 20 %
-  de lo cargado (archivo mal leído). En ambos casos hay que tildar una confirmación.
-- **Auditoría**: se registran exportaciones (cantidad y filtros) y actualizaciones
-  (cantidades y nombre de archivo). Nunca el contenido de las notas.
-- **Datos reales fuera del repo**: los tests usan nombres y DNI inventados. El
-  `.mdb` y sus exports no se versionan.
+
+Tres cosas de la pantalla que no se ven leyendo una función suelta:
+
+- **Lo que aparece y desaparece arriba de `st.tabs` va en contenedores fijos**
+  (`zona_lectura`, `zona_avisos`). El spinner de `_leer()` sólo existe cuando no
+  hay caché y los avisos de guardado duran una corrida; sueltos, corren de lugar
+  todo lo que sigue y Streamlit vuelve a montar las pestañas en la primera, en el
+  medio de una carga.
+- **«Editar en lote» congela el recorte en `session_state`.** `st.data_editor`
+  incluye los datos en su identidad: si cambian por debajo (el caché se renueva
+  cada 10 minutos, o guarda otra persona) descarta lo editado, aunque tenga `key`.
+  Por lo mismo su configuración no lleva nada que cambie con el día.
+- **`AppTest` no maneja `st.data_editor`, ni la selección de filas, ni el
+  uploader, y tras un `st.rerun()` su árbol conserva los elementos de la corrida
+  interrumpida.** Para probar la página se usa un arnés que reemplaza esos tres
+  widgets y `get_supabase` por una base falsa en memoria, y se sigue con una
+  `AppTest` nueva después de cada guardado. La grilla real se prueba en el
+  navegador.
+
+**Orden de despliegue**: `migration_postulantes_edicion.sql` va ANTES que el
+código. `usuarios.buscar` y `leer_todo` piden las columnas por nombre: sin ellas
+no carga ni el login. La migración es aditiva, así que el código viejo sigue
+andando con ella aplicada.
 
 ### Lecturas a Supabase: siempre paginadas
 
