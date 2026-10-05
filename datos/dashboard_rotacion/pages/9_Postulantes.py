@@ -12,6 +12,7 @@ import streamlit as st
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 from auth import puede_ver_postulantes, current_user  # noqa: E402
 from utils import (inyectar_css_base, get_supabase, chart_base,  # noqa: E402
+                   cargar_empleados_cruce,
                    COLOR_PRIMARY, COLOR_TEXT, COLOR_MUTED, COLOR_BORDER)
 import auditoria  # noqa: E402
 import postulantes as pt  # noqa: E402
@@ -28,6 +29,8 @@ MIME_XLSX = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
 SOLO_APTOS = "Marcados aptos"
 SOLO_NOTAS = "Con notas"
 SOLO_REPETIDOS = "Se presentó más de una vez"
+SOLO_LEGAJO = "Ingresó (con legajo)"
+SOLO_REVISAR = "DNI a revisar"
 
 LEYENDA_APTO = (
     "«Apto ✓» significa que la casilla estaba tildada en Access. **Sin tilde no "
@@ -92,14 +95,23 @@ if not puede_ver_postulantes():
 
 # ─── Datos ────────────────────────────────────────────────────
 @st.cache_data(ttl=600, show_spinner="Cargando el registro de postulantes…")
-def _leer() -> pd.DataFrame:
-    """Todo el registro, con las columnas derivadas ya calculadas.
+def _leer() -> tuple:
+    """(registro, legajos_ok): todo el registro, enriquecido y cruzado con el padrón.
 
     Son pocos miles de filas: entran en memoria y se filtran en pandas. El caché
     se invalida con `_leer.clear()` sin volar el de la API de empleados. Sólo se
     llama después del chequeo de permiso de arriba.
+
+    El legajo es un agregado: si la API de empleados no responde, la consulta
+    sigue andando con la columna vacía y `legajos_ok` en False.
     """
-    return pt.enriquecer(pt.leer_todo(get_supabase()))
+    registro = pt.enriquecer(pt.leer_todo(get_supabase()))
+    try:
+        empleados = pt.preparar_empleados(cargar_empleados_cruce())
+    except Exception:  # noqa: BLE001 — sin el padrón sólo falta el legajo
+        empleados = None
+    hay_padron = empleados is not None and not empleados.empty
+    return pt.cruzar_legajos(registro, empleados), hay_padron
 
 
 @st.cache_data(max_entries=2, show_spinner="Leyendo el archivo…")
@@ -108,14 +120,16 @@ def _leer_subido(nombre: str, contenido: bytes) -> pd.DataFrame:
     return pt.normalizar_archivo(pt.leer_archivo(nombre, contenido))
 
 
-@st.cache_data(max_entries=4, show_spinner=False)
+@st.cache_data(ttl=600, max_entries=4, show_spinner=False)
 def _excel(numeros: tuple, version: str) -> bytes:
     """El Excel de un recorte. En caché: armarlo en cada rerun frena la búsqueda.
 
     `version` cambia cuando se actualiza el registro: sin ella, tras una carga
-    el botón seguiría bajando el Excel viejo de ese mismo recorte.
+    el botón seguiría bajando el Excel viejo de ese mismo recorte. El
+    vencimiento es por el legajo, que puede cambiar en el padrón sin que cambie
+    nada del registro.
     """
-    df = _leer()
+    df, _legajos_ok = _leer()
     return pt.exportar_excel(df[df["numero_orden"].isin(numeros)])
 
 
@@ -155,6 +169,10 @@ def _tabla(f: pd.DataFrame, con_persona=True) -> pd.DataFrame:
     if con_persona:
         vista["Apellido y nombre"] = f["apenom"]
         vista["DNI"] = f["dni"]
+        # Sólo en lo que viene del registro: una vista previa de importación
+        # todavía no está cruzada con el padrón.
+        if "legajo" in f.columns:
+            vista["Legajo"] = f["legajo"]
     vista["Puesto"] = f["puesto"]
     vista["Sector"] = f["sector"]
     vista["Apto"] = f["apto"].map({True: "✓", False: ""})
@@ -175,6 +193,10 @@ COLUMNAS_TABLA = {
     "Nº": st.column_config.NumberColumn(format="%d", width="small"),
     "Fecha": st.column_config.DateColumn(format="DD/MM/YYYY", width="small"),
     "DNI": st.column_config.NumberColumn(format="%d", width="small"),
+    "Legajo": st.column_config.TextColumn(
+        width="small",
+        help="Legajo en MasterBus si la persona ingresó: mismo DNI y apellido en el "
+             "padrón de empleados. Vacío = no figura como empleado, o no tiene DNI."),
     "Apto": st.column_config.TextColumn(
         width="small", help="✓ = casilla tildada en Access. Vacío = sin marcar, no rechazado."),
     "Motivo": st.column_config.TextColumn(width="medium"),
@@ -196,6 +218,26 @@ def _render_ficha(df: pd.DataFrame, numero: int) -> None:
         chips += (f'<span class="ficha-chip" style="--chip-bg:{COLOR_AVISO_BG}; '
                   f'--chip-fg:{COLOR_AVISO};">Se presentó {int(fila["veces"])} veces</span>')
 
+    empleo = ""
+    if fila["legajo"]:
+        if bool(fila["legajo_activo"]):
+            situacion, tono, fondo = "Activo", COLOR_OK, COLOR_OK_BG
+        else:
+            baja = pt.to_date(fila["legajo_baja"])
+            situacion = f"Baja {baja:%d/%m/%Y}" if baja else "Baja"
+            tono, fondo = COLOR_NEUTRO, COLOR_NEUTRO_BG
+        chips += (f'<span class="ficha-chip" style="--chip-bg:{fondo}; --chip-fg:{tono};">'
+                  f'Legajo {_esc(str(fila["legajo"]))} · {situacion}</span>')
+        # El legajo es de la persona, no de esta entrevista: la fecha de
+        # ingreso al lado deja ver si entró por ésta o en otro momento.
+        ingreso = pt.to_date(fila["legajo_ingreso"])
+        entrevista = pt.to_date(fila["fecha"])
+        entrada = f"Ingresó el {ingreso:%d/%m/%Y}" if ingreso else "Ingresó (sin fecha en el padrón)"
+        if ingreso and entrevista and ingreso < entrevista:
+            entrada += ", antes de esta entrevista"
+        empleo = "<br>" + _esc(" · ".join(
+            x for x in (entrada, str(fila["legajo_empleador"])) if x))
+
     dni = "sin DNI" if pd.isna(fila["dni"]) else f"DNI {_miles(fila['dni'])}"
     datos = [f"Nº {int(fila['numero_orden'])}", _fecha(fila["fecha"]), dni]
     lugar = " · ".join(x for x in (fila["puesto"], fila["sector"]) if x)
@@ -213,10 +255,16 @@ def _render_ficha(df: pd.DataFrame, numero: int) -> None:
             f'{chips}</div>'
             f'<div class="ficha-meta">{_esc(" · ".join(datos))}<br>'
             f'{_esc(lugar or "Sin puesto ni sector cargados")}'
-            f' · Entrevistó: {_esc(entrevisto)}</div>'
+            f' · Entrevistó: {_esc(entrevisto)}{empleo}</div>'
             f'{_bloque(pt.ENCABEZADO["motivo_rechazo"], fila["motivo_rechazo"])}'
             f'{_bloque(pt.ENCABEZADO["observaciones"], fila["observaciones"])}'
             f'</div>', unsafe_allow_html=True)
+
+        if fila["legajo_estado"] == pt.LEGAJO_REVISAR:
+            st.warning(
+                "Este DNI figura en el padrón de empleados con otro apellido. Lo "
+                "más probable es que el DNI esté mal cargado: por eso no se "
+                "muestra el legajo.")
 
         # El historial sale de TODO el registro, no del recorte filtrado: la
         # pregunta es si la persona ya se presentó, no si cumple el filtro.
@@ -245,10 +293,11 @@ c_btn, c_estado = st.columns([1.5, 6], vertical_alignment="center")
 with c_btn:
     if st.button("↺  Actualizar"):
         _leer.clear()
+        cargar_empleados_cruce.clear()
         st.rerun()
 
 try:
-    df = _leer()
+    df, LEGAJOS_OK = _leer()
 except Exception:  # noqa: BLE001
     st.error("No se pudo cargar el registro de postulantes. Revisá la conexión con la base.")
     if st.button("Reintentar"):
@@ -266,7 +315,7 @@ visibles = df[~df["en_blanco"]] if HAY_DATOS else df
 
 momento, quien = pt.ultima_actualizacion(df)
 # Identifica el estado del registro: cambia con cada actualización desde Access.
-VERSION = f"{len(df)}|{momento}"
+VERSION = f"{len(df)}|{momento}|{LEGAJOS_OK}"
 
 with c_estado:
     if HAY_DATOS:
@@ -281,12 +330,20 @@ with c_estado:
                           + (f" por {quien}" if quien else ""))
         st.caption(" · ".join(partes))
 
+if HAY_DATOS and not LEGAJOS_OK:
+    st.warning("No se pudo consultar el padrón de empleados: la columna **Legajo** "
+               "está vacía por ahora. Probá con «↺ Actualizar» en un rato.")
+
 
 # ══════════════════════════════════════════════════════════════
 # Búsqueda y filtros (valen para Entrevistas y para Resumen)
 # ══════════════════════════════════════════════════════════════
 FILTROS_DEFECTO = {"pt_q": "", "pt_grupos": [], "pt_sectores": [], "pt_entrev": [],
                    "pt_desde": None, "pt_hasta": None, "pt_solo": []}
+# Las de legajo sólo tienen sentido con el padrón a la vista.
+OPCIONES_SOLO = [SOLO_APTOS, SOLO_NOTAS, SOLO_REPETIDOS]
+if LEGAJOS_OK:
+    OPCIONES_SOLO += [SOLO_LEGAJO, SOLO_REVISAR]
 
 
 def _limpiar_filtros() -> None:
@@ -305,7 +362,7 @@ if HAY_DATOS:
     # Tras una actualización una opción puede dejar de existir: si el valor
     # guardado ya no está entre las opciones, el multiselect revienta.
     for clave, validas in (("pt_grupos", op_grupos), ("pt_sectores", op_sectores),
-                           ("pt_entrev", op_entrev)):
+                           ("pt_entrev", op_entrev), ("pt_solo", OPCIONES_SOLO)):
         st.session_state[clave] = [v for v in st.session_state.get(clave, [])
                                    if v in validas]
 
@@ -339,7 +396,7 @@ if HAY_DATOS:
 
     p1, p2 = st.columns([6, 1.5], vertical_alignment="bottom")
     with p1:
-        solo = st.pills("Mostrar solo", [SOLO_APTOS, SOLO_NOTAS, SOLO_REPETIDOS],
+        solo = st.pills("Mostrar solo", OPCIONES_SOLO,
                         selection_mode="multi", key="pt_solo") or []
     with p2:
         st.button("Limpiar filtros", on_click=_limpiar_filtros, width="stretch")
@@ -350,6 +407,8 @@ if HAY_DATOS:
         desde=desde, hasta=hasta,
         solo_aptos=SOLO_APTOS in solo, solo_con_notas=SOLO_NOTAS in solo,
         solo_repetidos=SOLO_REPETIDOS in solo,
+        solo_con_legajo=SOLO_LEGAJO in solo,
+        solo_dni_a_revisar=SOLO_REVISAR in solo,
     )
 
 HAY_OTROS_FILTROS = bool(grupos or sectores or entrevistadores or desde or hasta or solo)

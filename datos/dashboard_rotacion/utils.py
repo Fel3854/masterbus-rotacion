@@ -122,6 +122,30 @@ def cargar_empleados_activos():
     return activos
 
 
+# Lo único que necesita el cruce de legajos de Postulantes.
+COLUMNAS_CRUCE = ["legajo", "apenom", "nrodoc", "empleador", "fechainicio",
+                  "fechafin", "activo"]
+
+
+@st.cache_data(ttl=3600, max_entries=1, show_spinner=False)
+def cargar_empleados_cruce():
+    """Padrón completo de la API, para cruzar postulantes con su legajo.
+
+    A diferencia de `cargar_datos()`, trae TODOS los empleadores y no descarta a
+    quien no tiene fecha de inicio: acá la pregunta es si la persona figura como
+    empleado, no la rotación del Grupo Master. Tiene su propio caché para no
+    tocar el de las otras páginas, y guarda sólo las columnas del cruce: CBU,
+    domicilio y teléfono no tienen por qué quedar en memoria para esto.
+    """
+    try:
+        resp = requests.get(API_URL, timeout=30)
+        resp.raise_for_status()
+    except requests.RequestException as e:
+        logger.error("Error al cargar el padrón para el cruce de legajos: %s", e)
+        raise
+    return pd.DataFrame(resp.json())[COLUMNAS_CRUCE].copy()
+
+
 def chart_base(**overrides):
     """Tokens de diseño compartidos para los gráficos Plotly — branding MasterBus."""
     base = dict(

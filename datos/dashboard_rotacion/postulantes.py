@@ -25,7 +25,7 @@ import re
 import tempfile
 import types
 import unicodedata
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 from io import BytesIO
 
 import pandas as pd
@@ -761,6 +761,149 @@ def enriquecer(df) -> pd.DataFrame:
     return out.sort_values("numero_orden", ascending=False).reset_index(drop=True)
 
 
+# ─── Legajo (cruce con el padrón de empleados) ───────────────
+# El legajo no se guarda: se deriva al leer, cruzando cada entrevista con el
+# padrón de MasterBus. Así aparece solo cuando dan de alta a la persona y no hay
+# un dato que mantener a mano. La regla es DNI + apellido: el DNI solo no
+# alcanza, porque uno mal tipeado puede caer justo en el de otro empleado.
+COLUMNAS_LEGAJO = ["legajo", "legajo_empleador", "legajo_ingreso", "legajo_baja",
+                   "legajo_activo", "legajo_estado"]
+COLUMNAS_EMPLEADOS = ["dni", "apellido", "legajo", "empleador", "ingreso", "baja",
+                      "activo"]
+ENCABEZADOS_LEGAJO = ["Legajo", "Empleador", "Fecha de ingreso"]
+
+LEGAJO_OK = "ok"             # DNI y apellido coinciden: se muestra el legajo
+LEGAJO_REVISAR = "revisar"   # el DNI es de un empleado con otro apellido
+
+# Días que una entrevista puede estar fechada DESPUÉS del ingreso y seguir
+# siendo la que lo originó (se anota tarde, o el mismo día del alta).
+TOLERANCIA_INGRESO = 7
+
+# Palabras que no distinguen un apellido de otro («DE LOS SANTOS», «SAN MARTIN»).
+_PARTICULAS = {"DEL", "LOS", "LAS", "SAN"}
+
+
+def preparar_empleados(crudo) -> pd.DataFrame:
+    """El padrón de la API, con lo justo para cruzar y en valores comparables.
+
+    `crudo` trae las columnas de la API (`nrodoc`, `apenom`, `legajo`,
+    `empleador`, `fechainicio`, `fechafin`, `activo`). El apellido es lo que va
+    antes de la coma de «APELLIDO, Nombres». Quien no tiene documento o legajo
+    queda afuera: no hay con qué cruzarlo ni qué mostrar.
+    """
+    if crudo is None or len(crudo) == 0:
+        return pd.DataFrame(columns=COLUMNAS_EMPLEADOS)
+
+    ingresos = pd.to_datetime(crudo["fechainicio"], format="%d/%m/%Y", errors="coerce")
+    bajas = pd.to_datetime(crudo["fechafin"], format="%d/%m/%Y", errors="coerce")
+    filas = []
+    for nrodoc, apenom, legajo, empleador, ingreso, baja, activo in zip(
+            crudo["nrodoc"], crudo["apenom"], crudo["legajo"], crudo["empleador"],
+            ingresos, bajas, crudo["activo"]):
+        dni = canon_dni(nrodoc)
+        legajo = "" if _vacio(legajo) else str(legajo).strip()
+        if dni is None or not legajo:
+            continue
+        filas.append({
+            "dni": dni,
+            "apellido": "" if _vacio(apenom) else norm(str(apenom).split(",")[0]),
+            "legajo": legajo,
+            "empleador": "" if _vacio(empleador) else str(empleador).strip(),
+            "ingreso": to_date(ingreso),
+            "baja": to_date(baja),
+            "activo": str(activo).strip() == "1",
+        })
+    return pd.DataFrame(filas, columns=COLUMNAS_EMPLEADOS)
+
+
+def _palabras_de_apellido(apellido) -> set:
+    return {p for p in apellido.split() if len(p) >= 3 and p not in _PARTICULAS}
+
+
+def apellido_compatible(a, b, corte=0.8) -> bool:
+    """True si dos apellidos pueden ser el de la misma persona.
+
+    Lo son si coinciden sin tildes ni mayúsculas, si comparten una palabra (el
+    registro dice «PEREZ» y el padrón «PEREZ GOMEZ») o si se parecen lo
+    suficiente para ser un error de tipeo («GONZALES» / «GONZALEZ»). Un apellido
+    vacío no es compatible con nada: no hay con qué confirmar que el DNI es de
+    esa persona.
+    """
+    a, b = norm(a), norm(b)
+    if not a or not b:
+        return False
+    if a == b or _palabras_de_apellido(a) & _palabras_de_apellido(b):
+        return True
+    return difflib.SequenceMatcher(None, a, b).ratio() >= corte
+
+
+def cruzar_legajos(df, empleados) -> pd.DataFrame:
+    """Agrega a cada entrevista el legajo de la persona, si figura como empleado.
+
+    `df` es el frame de `enriquecer`; `empleados`, el de `preparar_empleados`, o
+    None si no se pudo consultar la API: las columnas quedan vacías y la
+    consulta sigue funcionando.
+
+    Por cada entrevista con DNI válido:
+      · Ningún empleado con ese DNI → sin legajo.
+      · Hay, pero ninguno con un apellido compatible → `revisar`, sin legajo. Lo
+        más probable es un DNI mal cargado, y mostrar el legajo sería atribuirle
+        a un postulante el empleo de otra persona.
+      · Hay con apellido compatible → `ok`. Si son varios empleos, el primero
+        que empezó desde la entrevista (con TOLERANCIA_INGRESO días de margen);
+        si todos son anteriores o la entrevista no tiene fecha, el más reciente.
+
+    El legajo es de la PERSONA, no de la entrevista: una de 2015 que no terminó
+    en ingreso lo muestra igual si la persona entró en 2019. Por eso al lado va
+    la fecha de ingreso.
+    """
+    out = df.copy()
+    columnas = {c: [] for c in COLUMNAS_LEGAJO}
+
+    por_dni: dict = {}
+    if empleados is not None:
+        for empleo in empleados.to_dict("records"):
+            por_dni.setdefault(int(empleo["dni"]), []).append(empleo)
+    for empleos in por_dni.values():
+        # De más viejo a más nuevo; los que no tienen fecha de ingreso, primero.
+        empleos.sort(key=lambda e: (e["ingreso"] is not None, e["ingreso"] or date.min))
+
+    if not out.empty:
+        for dni, valido, apellido, fecha in zip(
+                out["dni"], out["dni_valido"], out["apellido"], out["fecha"]):
+            elegido, estado = None, ""
+            empleos = por_dni.get(int(dni)) if valido else None
+            if empleos:
+                compatibles = [e for e in empleos
+                               if apellido_compatible(apellido, e["apellido"])]
+                if not compatibles:
+                    estado = LEGAJO_REVISAR
+                else:
+                    estado = LEGAJO_OK
+                    elegido = compatibles[-1]
+                    if fecha is not None:
+                        desde = fecha - timedelta(days=TOLERANCIA_INGRESO)
+                        posteriores = [e for e in compatibles
+                                       if e["ingreso"] is not None and e["ingreso"] >= desde]
+                        if posteriores:
+                            elegido = posteriores[0]
+            columnas["legajo"].append(elegido["legajo"] if elegido else "")
+            columnas["legajo_empleador"].append(elegido["empleador"] if elegido else "")
+            columnas["legajo_ingreso"].append(elegido["ingreso"] if elegido else None)
+            columnas["legajo_baja"].append(elegido["baja"] if elegido else None)
+            columnas["legajo_activo"].append(bool(elegido["activo"]) if elegido else False)
+            columnas["legajo_estado"].append(estado)
+
+    for columna, valores in columnas.items():
+        out[columna] = pd.Series(valores, index=out.index, dtype=object)
+    out["legajo_activo"] = out["legajo_activo"].astype(bool)
+    if not out.empty:
+        # Para poder buscar una entrevista por el legajo de la persona.
+        out["_texto"] = [f"{texto} {legajo}" if legajo else texto
+                         for texto, legajo in zip(out["_texto"], out["legajo"])]
+    return out
+
+
 # ─── Búsqueda y filtros ──────────────────────────────────────
 def _palabras(consulta) -> list:
     q = norm(consulta)
@@ -794,11 +937,13 @@ def buscar(df, consulta) -> pd.DataFrame:
 
 def filtrar(df, grupos=None, sectores=None, entrevistadores=None, desde=None,
             hasta=None, solo_aptos=False, solo_con_notas=False,
-            solo_repetidos=False) -> pd.DataFrame:
+            solo_repetidos=False, solo_con_legajo=False,
+            solo_dni_a_revisar=False) -> pd.DataFrame:
     """Aplica los filtros de la pantalla. Cada uno es opcional.
 
     Con «desde» o «hasta» las entrevistas sin fecha quedan afuera: no se sabe
-    si caen en el período. Sin ninguno de los dos, entran.
+    si caen en el período. Sin ninguno de los dos, entran. Los dos filtros de
+    legajo necesitan el frame ya cruzado (`cruzar_legajos`).
     """
     out = df
     if grupos:
@@ -817,6 +962,10 @@ def filtrar(df, grupos=None, sectores=None, entrevistadores=None, desde=None,
         out = out[out["con_notas"]]
     if solo_repetidos:
         out = out[out["veces"] > 1]
+    if solo_con_legajo:
+        out = out[out["legajo"] != ""]
+    if solo_dni_a_revisar:
+        out = out[out["legajo_estado"] == LEGAJO_REVISAR]
     return out
 
 
@@ -923,8 +1072,13 @@ def preparar_export(df) -> pd.DataFrame:
     «Apto para ingresar» sale como «Sí» o vacío, nunca «No»: la casilla sin
     tildar no es un rechazo. Ese mismo Excel se puede volver a subir para
     actualizar.
+
+    Si el frame viene cruzado con el padrón, al final van el legajo, el
+    empleador y la fecha de ingreso. Son de consulta: al volver a subir el
+    Excel se ignoran, como cualquier columna de más.
     """
-    columnas = [e for _c, e in CAMPOS]
+    con_legajo = "legajo" in df.columns
+    columnas = [e for _c, e in CAMPOS] + (ENCABEZADOS_LEGAJO if con_legajo else [])
     if df.empty:
         return pd.DataFrame(columns=columnas)
     out = pd.DataFrame(index=df.index)
@@ -937,6 +1091,11 @@ def preparar_export(df) -> pd.DataFrame:
             out[encabezado] = df[col].map(to_date)
         else:
             out[encabezado] = df[col].map(lambda v: "" if _vacio(v) else v)
+    if con_legajo:
+        # Como número cuando lo es, para poder ordenar y filtrar en Excel.
+        out["Legajo"] = df["legajo"].map(lambda v: int(v) if str(v).isdigit() else v)
+        out["Empleador"] = df["legajo_empleador"]
+        out["Fecha de ingreso"] = df["legajo_ingreso"].map(to_date)
     return out.apply(lambda c: c.map(_limpiar_celda))
 
 

@@ -446,6 +446,183 @@ def test_avisa_cuando_un_mismo_dni_tiene_apellidos_distintos():
     assert pt.apellidos_distintos(e, 3) is False      # mismo apellido, otra grafía
 
 
+# ─── Legajo ──────────────────────────────────────────────────
+def _empleo(nrodoc, apenom, legajo, inicio="01/03/2020", fin=None, activo="1",
+            empleador="EMPRESA UNO"):
+    """Una fila del padrón tal como la entrega la API."""
+    return {"nrodoc": nrodoc, "apenom": apenom, "legajo": legajo, "empleador": empleador,
+            "fechainicio": inicio, "fechafin": fin, "activo": activo}
+
+
+def _padron(*empleos):
+    return pt.preparar_empleados(pd.DataFrame(list(empleos)))
+
+
+def _cruzada(entrevistas, *empleos):
+    return pt.cruzar_legajos(_enriquecida(*entrevistas), _padron(*empleos))
+
+
+def _legajos(df):
+    return dict(zip(df["numero_orden"], df["legajo"]))
+
+
+def test_preparar_empleados_deja_valores_comparables():
+    p = _padron(_empleo("11.222.333", "PÉREZ GÓMEZ, Juan Carlos", " 1234 ",
+                        inicio="05/03/2020", fin="31/12/2021", activo="0"))
+    fila = p.iloc[0]
+    assert list(p.columns) == pt.COLUMNAS_EMPLEADOS
+    assert fila["dni"] == 11222333 and fila["apellido"] == "PEREZ GOMEZ"
+    assert fila["legajo"] == "1234" and fila["empleador"] == "EMPRESA UNO"
+    assert fila["ingreso"] == date(2020, 3, 5) and fila["baja"] == date(2021, 12, 31)
+    assert bool(fila["activo"]) is False
+
+
+def test_preparar_empleados_toma_las_fechas_invalidas_como_vacias():
+    p = _padron(_empleo("11222333", "ALFA, Ana", "10", inicio="00/00/0000", fin=None))
+    assert p.iloc[0]["ingreso"] is None and p.iloc[0]["baja"] is None
+
+
+def test_preparar_empleados_descarta_a_quien_no_tiene_documento_o_legajo():
+    p = _padron(_empleo("", "ALFA, Ana", "10"), _empleo(None, "BETA, Bea", "11"),
+                _empleo("11222333", "GAMA, Gus", ""), _empleo("22333444", "DELTA, Dan", "12"))
+    assert p["legajo"].tolist() == ["12"]
+    assert _padron().empty and pt.preparar_empleados(None).empty
+
+
+@pytest.mark.parametrize("registro, padron, esperado", [
+    ("ALFA", "ALFA", True),
+    ("Alfá ", "ALFA", True),                    # tildes, mayúsculas y espacios
+    ("ALFA", "ALFA BETA", True),                # apellido compuesto en el padrón
+    ("ALFA BETA", "BETA", True),                # o en el registro
+    ("GONZALES", "GONZALEZ", True),             # error de tipeo
+    ("ALFA-BETA", "ALFA BETA", True),
+    ("ALFA", "OMEGA", False),
+    ("DE LOS ALFA", "DE LOS OMEGA", False),     # las partículas no cuentan
+    ("SAN ALFA", "SAN OMEGA", False),
+    ("", "ALFA", False),                        # sin apellido no hay con qué confirmar
+    (None, "ALFA", False),
+])
+def test_apellido_compatible(registro, padron, esperado):
+    assert pt.apellido_compatible(registro, padron) is esperado
+
+
+def test_el_legajo_aparece_cuando_coinciden_dni_y_apellido():
+    c = _cruzada([_fila(1, apellido="Alfa", dni=11222333, fecha="2020-02-20"),
+                  _fila(2, apellido="BETA", dni=22333444)],
+                 _empleo("11.222.333", "ALFA, Ana", "1234", inicio="01/03/2020"))
+    uno = c[c["numero_orden"] == 1].iloc[0]
+    assert uno["legajo"] == "1234" and uno["legajo_estado"] == pt.LEGAJO_OK
+    assert uno["legajo_empleador"] == "EMPRESA UNO"
+    assert uno["legajo_ingreso"] == date(2020, 3, 1) and bool(uno["legajo_activo"]) is True
+    dos = c[c["numero_orden"] == 2].iloc[0]
+    assert dos["legajo"] == "" and dos["legajo_estado"] == ""
+    assert dos["legajo_ingreso"] is None and bool(dos["legajo_activo"]) is False
+
+
+def test_un_dni_que_es_de_otro_apellido_no_muestra_legajo_y_queda_a_revisar():
+    """Es la razón de cruzar por DNI + apellido: un DNI mal tipeado puede caer
+    justo en el de otro empleado, y le atribuiríamos su legajo."""
+    c = _cruzada([_fila(1, apellido="ALFA", dni=11222333)],
+                 _empleo("11222333", "OMEGA, Oscar", "1234"))
+    assert _legajos(c) == {1: ""}
+    assert c.iloc[0]["legajo_estado"] == pt.LEGAJO_REVISAR
+
+
+def test_una_entrevista_sin_dni_nunca_cruza():
+    c = _cruzada([_fila(1, apellido="ALFA", dni=None), _fila(2, apellido="ALFA", dni=0)],
+                 _empleo("", "ALFA, Ana", "10"), _empleo("0", "ALFA, Ana", "11"),
+                 _empleo("11222333", "ALFA, Ana", "12"))
+    assert _legajos(c) == {1: "", 2: ""}
+    assert set(c["legajo_estado"]) == {""}
+
+
+def test_con_varios_empleos_muestra_el_primero_que_empezo_desde_la_entrevista():
+    empleos = [_empleo("11222333", "ALFA, Ana", "100", inicio="01/03/2015", fin="01/03/2016", activo="0"),
+               _empleo("11222333", "ALFA, Ana", "200", inicio="10/06/2019", fin="01/02/2020", activo="0",
+                       empleador="EMPRESA DOS"),
+               _empleo("11222333", "ALFA, Ana", "300", inicio="01/09/2023")]
+    c = _cruzada([_fila(1, apellido="ALFA", dni=11222333, fecha="2019-05-20")], *empleos)
+    fila = c.iloc[0]
+    assert fila["legajo"] == "200" and fila["legajo_empleador"] == "EMPRESA DOS"
+    assert fila["legajo_baja"] == date(2020, 2, 1) and bool(fila["legajo_activo"]) is False
+
+
+def test_si_todos_los_empleos_son_anteriores_muestra_el_mas_reciente():
+    """Alguien que ya trabajó acá y se vuelve a presentar: el legajo es dato
+    de la persona, aunque esta entrevista no haya terminado en ingreso."""
+    c = _cruzada([_fila(1, apellido="ALFA", dni=11222333, fecha="2024-05-20")],
+                 _empleo("11222333", "ALFA, Ana", "200", inicio="10/06/2019"),
+                 _empleo("11222333", "ALFA, Ana", "100", inicio="01/03/2015"))
+    assert _legajos(c) == {1: "200"}
+
+
+def test_una_entrevista_fechada_pocos_dias_despues_del_ingreso_es_la_de_ese_ingreso():
+    empleos = [_empleo("11222333", "ALFA, Ana", "200", inicio="10/06/2019"),
+               _empleo("11222333", "ALFA, Ana", "300", inicio="01/09/2023")]
+    dentro = _cruzada([_fila(1, apellido="ALFA", dni=11222333, fecha="2019-06-17")], *empleos)
+    fuera = _cruzada([_fila(1, apellido="ALFA", dni=11222333, fecha="2019-06-18")], *empleos)
+    assert _legajos(dentro) == {1: "200"}
+    assert _legajos(fuera) == {1: "300"}
+
+
+def test_sin_fecha_de_entrevista_muestra_el_empleo_mas_reciente():
+    c = _cruzada([_fila(1, apellido="ALFA", dni=11222333)],
+                 _empleo("11222333", "ALFA, Ana", "300", inicio="01/09/2023"),
+                 _empleo("11222333", "ALFA, Ana", "200", inicio="10/06/2019"),
+                 _empleo("11222333", "ALFA, Ana", "50", inicio="00/00/0000"))
+    assert _legajos(c) == {1: "300"}
+
+
+def test_si_el_dni_esta_repetido_en_el_padron_gana_el_apellido_que_coincide():
+    c = _cruzada([_fila(1, apellido="ALFA", dni=11222333, fecha="2020-01-10")],
+                 _empleo("11222333", "OMEGA, Oscar", "900", inicio="01/02/2020"),
+                 _empleo("11222333", "ALFA, Ana", "100", inicio="01/03/2015"))
+    assert _legajos(c) == {1: "100"}
+    assert c.iloc[0]["legajo_estado"] == pt.LEGAJO_OK
+
+
+@pytest.mark.parametrize("padron", [None, pd.DataFrame(columns=pt.COLUMNAS_EMPLEADOS)])
+def test_sin_padron_las_columnas_quedan_vacias_y_la_consulta_sigue(padron):
+    """Si la API de empleados no responde, sólo falta el legajo."""
+    c = pt.cruzar_legajos(_enriquecida(_fila(1, apellido="ALFA", dni=11222333)), padron)
+    assert set(pt.COLUMNAS_LEGAJO) <= set(c.columns)
+    assert _legajos(c) == {1: ""}
+    assert _numeros(pt.buscar(c, "alfa")) == [1]
+    assert pt.filtrar(c, solo_con_legajo=True).empty
+
+
+def test_cruzar_un_registro_vacio_no_rompe():
+    vacio = pt.enriquecer(pd.DataFrame(columns=pt.COLUMNAS_DB))
+    c = pt.cruzar_legajos(vacio, _padron(_empleo("11222333", "ALFA, Ana", "10")))
+    assert c.empty and set(pt.COLUMNAS_LEGAJO) <= set(c.columns)
+    assert pt.filtrar(c, solo_con_legajo=True, solo_dni_a_revisar=True).empty
+
+
+def test_se_puede_buscar_por_legajo():
+    c = _cruzada([_fila(1, apellido="ALFA", dni=11222333), _fila(2, apellido="BETA", dni=22333444)],
+                 _empleo("11222333", "ALFA, Ana", "4321"))
+    assert _numeros(pt.buscar(c, "4321")) == [1]
+
+
+def test_filtros_de_legajo():
+    c = _cruzada([_fila(1, apellido="ALFA", dni=11222333),
+                  _fila(2, apellido="BETA", dni=22333444),
+                  _fila(3, apellido="GAMA", dni=33444555)],
+                 _empleo("11222333", "ALFA, Ana", "10"),
+                 _empleo("22333444", "OMEGA, Oscar", "20"))
+    assert _numeros(pt.filtrar(c, solo_con_legajo=True)) == [1]
+    assert _numeros(pt.filtrar(c, solo_dni_a_revisar=True)) == [2]
+    assert _numeros(pt.filtrar(c)) == [1, 2, 3]
+
+
+def test_el_cruce_no_cambia_ni_el_orden_ni_las_demas_columnas():
+    e = _enriquecida(_fila(1, apellido="ALFA", dni=11222333), _fila(2, apellido="BETA"))
+    c = pt.cruzar_legajos(e, _padron(_empleo("11222333", "ALFA, Ana", "10")))
+    assert c["numero_orden"].tolist() == e["numero_orden"].tolist()
+    assert c["apenom"].tolist() == e["apenom"].tolist()
+    assert "legajo" not in e.columns          # no toca el frame que recibe
+
+
 # ─── resumen ─────────────────────────────────────────────────
 def test_resumen_cuenta_personas_y_los_que_volvieron():
     e = _enriquecida(
@@ -876,6 +1053,33 @@ def test_el_export_no_lleva_las_columnas_derivadas():
     out = pt.preparar_export(_enriquecida(_fila(1, apellido="ALFA")))
     for derivada in pt.DERIVADAS:
         assert derivada not in out.columns
+
+
+def test_el_export_suma_el_legajo_al_final_si_el_registro_viene_cruzado():
+    c = _cruzada([_fila(1, apellido="ALFA", dni=11222333), _fila(2, apellido="BETA")],
+                 _empleo("11222333", "ALFA, Ana", "1234", inicio="01/03/2020"))
+    out = pt.preparar_export(c)
+    assert list(out.columns)[:11] == [e for _c, e in pt.CAMPOS]
+    assert list(out.columns)[11:] == ["Legajo", "Empleador", "Fecha de ingreso"]
+    uno = out[out["Número de orden"] == 1].iloc[0]
+    assert uno["Legajo"] == 1234 and uno["Empleador"] == "EMPRESA UNO"
+    assert uno["Fecha de ingreso"] == date(2020, 3, 1)
+    dos = out[out["Número de orden"] == 2].iloc[0]
+    assert dos["Legajo"] == "" and dos["Fecha de ingreso"] is None
+    vacio = pt.cruzar_legajos(pt.enriquecer(pd.DataFrame(columns=pt.COLUMNAS_DB)), None)
+    assert list(pt.preparar_export(vacio).columns)[11:] == ["Legajo", "Empleador", "Fecha de ingreso"]
+
+
+def test_el_excel_con_legajo_se_puede_volver_a_subir_sin_cambios():
+    """Las tres columnas de legajo son de consulta: al subir el Excel se ignoran."""
+    base = _base(_fila(1, apellido="ALFA", dni=11222333, fecha="2026-09-24"),
+                 _fila(2, apellido="BETA"))
+    cruzada = pt.cruzar_legajos(pt.enriquecer(base),
+                                _padron(_empleo("11222333", "ALFA, Ana", "1234")))
+    archivo = pt.normalizar_archivo(
+        pt.leer_archivo("postulantes.xlsx", pt.exportar_excel(cruzada)))
+    plan = pt.plan_de_carga(archivo, base)
+    assert (len(plan["nuevas"]), len(plan["modificadas"]), plan["sin_cambios"]) == (0, 0, 2)
 
 
 def test_exportar_excel_devuelve_un_xlsx_incluso_vacio():
