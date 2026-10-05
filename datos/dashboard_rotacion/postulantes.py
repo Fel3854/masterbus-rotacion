@@ -1,14 +1,25 @@
-"""Postulantes — consulta del registro de entrevistas a postulantes (FORM 045 02).
+"""Postulantes — registro de entrevistas a postulantes (FORM 045 02).
 
 Módulo de lógica pura: NO importa Streamlit, así que se testea con pytest sin
-levantar la app (mismo criterio que `minutas.py` y `seguimiento.py`). Las dos
+levantar la app (mismo criterio que `minutas.py` y `seguimiento.py`). Las
 funciones que tocan la base reciben el cliente de Supabase por parámetro.
 
-El registro se sigue cargando en Access; acá sólo se consulta. La tabla guarda
-cada dato TAL CUAL viene, con sus errores de tipeo, y todo lo que ordena la
+El registro nació en Access y hoy se carga y se corrige acá: Access quedó como
+origen de lo histórico, que se puede seguir importando. La tabla guarda cada
+dato TAL CUAL se cargó, con sus errores de tipeo, y todo lo que ordena la
 consulta —familia de puesto, sector, entrevistador unificado, veces que se
-presentó— se deriva en pandas y no se guarda. Así las reglas viven en un solo
-lugar y corregir una no deja filas viejas con un valor de otra época.
+presentó, legajo— se deriva en pandas y no se guarda. Así las reglas viven en
+un solo lugar y corregir una no deja filas viejas con un valor de otra época.
+
+Tres reglas de la escritura, que no son obvias leyendo una función suelta:
+
+  · Nunca se borra. Una entrevista cargada por error se ANULA: deja de verse y
+    de contar, pero la fila queda y se puede restaurar.
+  · Se escribe sólo el campo que cambió, no la fila entera. Si dos personas
+    editan campos distintos de la misma entrevista, ninguna pisa a la otra.
+  · Un alta es un INSERT, jamás un upsert: si otro tomó ese número de orden,
+    tiene que fallar y reintentar con el siguiente, no reemplazar a una persona
+    por otra.
 
 Sobre la casilla «Apto para ingresar»: sólo dice algo cuando está tildada. Desde
 2023 casi no se usa (en 2025 se tildó el 2 % de las entrevistas, aunque buena
@@ -60,6 +71,7 @@ COLUMNAS_DB = [
     "numero_orden", "entrevistador", "fecha", "apellido", "nombres", "dni",
     "puesto", "sector", "apto", "motivo_rechazo", "observaciones",
     "importado_por", "fecha_importacion", "fecha_actualizacion",
+    "editado_por", "fecha_edicion", "anulada",
 ]
 
 EXTENSIONES = ("mdb", "xlsx", "csv")
@@ -67,6 +79,11 @@ EXTENSIONES = ("mdb", "xlsx", "csv")
 # PostgREST corta cada respuesta en 1000 filas: la lectura va paginada.
 PAGINA_LECTURA = 1000
 LOTE_UPSERT = 500
+# Números de orden por pedido al editar o releer. Van en la URL (`in.(…)`), así
+# que el lote es chico; además queda lejos del tope de 1000 filas por respuesta.
+LOTE_NUMEROS = 200
+# Veces que un alta vuelve a pedir número si otra persona se lo ganó.
+INTENTOS_ALTA = 3
 
 # Si una actualización pisa más que esta proporción de lo ya cargado, lo más
 # probable es que el archivo esté mal leído o no sea la base correcta.
@@ -552,13 +569,19 @@ def normalizar_archivo(crudo) -> pd.DataFrame:
 
 
 # ─── Qué cambia al actualizar ────────────────────────────────
-def plan_de_carga(archivo, base) -> dict:
+def plan_de_carga(archivo, base, proteger_editadas=False) -> dict:
     """Compara el archivo (ya normalizado) contra lo que hay en la base.
 
     Devuelve:
       · nuevas       entrevistas que no estaban.
-      · modificadas  las que cambiaron en Access; cada una trae `cambios`, una
-                     lista de (campo, valor en la base, valor en el archivo).
+      · modificadas  las que el archivo trae distintas; cada una con `cambios`,
+                     una lista de (campo, valor en la base, valor en el archivo).
+      · protegidas   con `proteger_editadas`, las modificadas que en la base
+                     fueron cargadas o editadas a mano (tienen `fecha_edicion`).
+                     Van aparte porque un archivo no las tiene que pisar sin
+                     que alguien lo decida: puede ser una copia de Access
+                     anterior a esa corrección, o traer en ese número a otra
+                     persona.
       · sin_cambios  cuántas están idénticas (no se tocan).
       · faltantes    las que están en la base y NO en el archivo. No se borran:
                      son la señal de que el archivo es una copia vieja.
@@ -568,23 +591,32 @@ def plan_de_carga(archivo, base) -> dict:
     en_base = {f["numero_orden"]: f
                for f in canonizar_base(base)[COLUMNAS_FORM].to_dict("records")}
 
-    nuevas, modificadas, sin_cambios = [], [], 0
+    a_mano = set()
+    if proteger_editadas and base is not None and "fecha_edicion" in base.columns:
+        a_mano = {canon_orden(n) for n, f in zip(base["numero_orden"], base["fecha_edicion"])
+                  if not _vacio(f)}
+
+    nuevas, modificadas, protegidas, sin_cambios = [], [], [], 0
     for numero, fila in en_archivo.items():
         actual = en_base.get(numero)
         if actual is None:
             nuevas.append(fila)
             continue
         cambios = [(c, actual[c], fila[c]) for c in COLUMNAS_DATO if actual[c] != fila[c]]
-        if cambios:
-            modificadas.append(dict(fila, cambios=cambios))
-        else:
+        if not cambios:
             sin_cambios += 1
+        elif numero in a_mano:
+            protegidas.append(dict(fila, cambios=cambios))
+        else:
+            modificadas.append(dict(fila, cambios=cambios))
     faltantes = [f for n, f in en_base.items() if n not in en_archivo]
 
     return {
         "nuevas": pd.DataFrame(nuevas, columns=COLUMNAS_FORM, dtype=object),
         "modificadas": pd.DataFrame(modificadas, columns=COLUMNAS_FORM + ["cambios"],
                                     dtype=object),
+        "protegidas": pd.DataFrame(protegidas, columns=COLUMNAS_FORM + ["cambios"],
+                                   dtype=object),
         "sin_cambios": sin_cambios,
         "faltantes": pd.DataFrame(faltantes, columns=COLUMNAS_FORM, dtype=object),
         "en_base": len(en_base),
@@ -617,6 +649,12 @@ def advertencias_de_carga(plan) -> list:
     return avisos
 
 
+def _fecha_legible(v):
+    """'AAAA-MM-DD' → 'dd/mm/aaaa', que es como se lee en pantalla. None si vacía."""
+    d = to_date(v)
+    return d.strftime("%d/%m/%Y") if d else None
+
+
 def describir_cambios(cambios) -> str:
     """«Observaciones: "PREOCU" → "INGRESÓ"» — para la vista previa en pantalla."""
     partes = []
@@ -624,15 +662,22 @@ def describir_cambios(cambios) -> str:
         etiqueta = ENCABEZADO.get(campo, campo)
         if campo == "apto":
             antes, despues = ("Sí" if antes else "—"), ("Sí" if despues else "—")
+        elif campo == "fecha":
+            antes, despues = _fecha_legible(antes), _fecha_legible(despues)
         a = "(vacío)" if antes is None else str(antes)
         d = "(vacío)" if despues is None else str(despues)
         partes.append(f"{etiqueta}: {a} → {d}")
     return " · ".join(partes)
 
 
-def a_cargar(plan) -> pd.DataFrame:
-    """Las filas que hay que mandar a la base: nuevas + modificadas."""
+def a_cargar(plan, pisar_protegidas=False) -> pd.DataFrame:
+    """Las filas que hay que mandar a la base: nuevas + modificadas.
+
+    Las protegidas sólo entran si se pide expresamente (`pisar_protegidas`).
+    """
     partes = [plan["nuevas"][COLUMNAS_FORM], plan["modificadas"][COLUMNAS_FORM]]
+    if pisar_protegidas:
+        partes.append(plan["protegidas"][COLUMNAS_FORM])
     partes = [p for p in partes if len(p)]
     if not partes:
         return pd.DataFrame(columns=COLUMNAS_FORM, dtype=object)
@@ -706,6 +751,244 @@ def upsert(client, registros, lote=LOTE_UPSERT) -> int:
     return enviados
 
 
+# ─── Alta y edición en el dashboard ──────────────────────────
+DNI_MINIMO, DNI_MAXIMO = 1_000_000, 99_999_999
+
+
+class NumeroOcupado(Exception):
+    """No se pudo asignar un número de orden: otras cargas los fueron tomando."""
+
+
+class EscrituraIncompleta(Exception):
+    """La base modificó menos entrevistas de las que se le pidieron."""
+
+
+def leer_dni(texto):
+    """(dni, error) de lo que se tipeó en un campo de DNI.
+
+    Vacío es válido —hay entrevistas sin DNI—, pero algo que no es un número no
+    se puede guardar como "sin dato" sin avisar.
+    """
+    if _vacio(texto):
+        return None, ""
+    dni = canon_dni(texto)
+    if dni is None:
+        return None, "El DNI tiene que ser un número, con o sin puntos."
+    return dni, ""
+
+
+def canonizar_fila(campos) -> dict:
+    """Los datos de un formulario → valores canónicos (lo que falte, vacío)."""
+    return {c: _CANON[c](campos.get(c)) for c in COLUMNAS_DATO}
+
+
+def validar_entrevista(fila, alta=False, campos=None, hoy=None) -> list:
+    """Motivos por los que una entrevista no se puede guardar. Vacía = está bien.
+
+    `fila` va en valores canónicos. En una edición sólo se miran los `campos`
+    que cambiaron: el registro histórico tiene DNI y fechas raros, y eso no
+    puede impedir corregirle otra cosa a esa entrevista.
+    """
+    mirar = set(COLUMNAS_DATO if campos is None else campos)
+    hoy = hoy or date.today()
+    errores = []
+    if alta and not fila.get("apellido"):
+        errores.append("Falta el apellido.")
+    dni = fila.get("dni")
+    if "dni" in mirar and dni is not None and not DNI_MINIMO <= dni <= DNI_MAXIMO:
+        errores.append(f"El DNI {dni} no parece válido: tiene que tener 7 u 8 dígitos.")
+    fecha = to_date(fila.get("fecha"))
+    if "fecha" in mirar and fecha is not None and fecha > hoy:
+        errores.append(f"La fecha {fecha:%d/%m/%Y} es posterior a hoy.")
+    return errores
+
+
+def posibles_duplicados(df, dni, fecha) -> pd.DataFrame:
+    """Entrevistas ya cargadas de esa persona con esa misma fecha.
+
+    Es la señal de que se está cargando dos veces lo mismo. Sin DNI o sin fecha
+    no hay forma de saberlo, así que no devuelve nada.
+    """
+    dni, fecha = canon_dni(dni), to_date(fecha)
+    if df.empty or dni is None or fecha is None:
+        return df.iloc[0:0]
+    return df[df["dni_valido"] & (df["dni"] == dni) & ~df["anulada"]
+              & df["fecha"].map(lambda f: f == fecha)]
+
+
+def siguiente_numero(client) -> int:
+    """El número de orden que le toca a la próxima entrevista: el mayor + 1.
+
+    Se lee de la base en el momento de guardar, no del registro en pantalla,
+    que puede tener minutos. Cuenta las anuladas y los renglones en blanco: un
+    número usado no se vuelve a usar.
+    """
+    resp = (client.table(TABLA).select("numero_orden")
+            .order("numero_orden", desc=True).limit(1).execute())
+    filas = resp.data or []
+    return int(filas[0]["numero_orden"]) + 1 if filas else 1
+
+
+def _es_clave_duplicada(error) -> bool:
+    """True si la base rechazó el INSERT porque ese número de orden ya existe."""
+    texto = str(error).lower()
+    return (getattr(error, "code", None) == "23505" or "23505" in texto
+            or "duplicate key" in texto)
+
+
+def registro_de_alta(fila, numero, usuario, ahora=None) -> dict:
+    """La fila que se inserta al cargar una entrevista en el dashboard.
+
+    Sin `importado_por` (no vino de un archivo) ni `fecha_importacion` (toma el
+    default de la base: el momento en que entró).
+    """
+    marca = (ahora or datetime.now(timezone.utc)).isoformat()
+    registro = {c: _nativo(fila.get(c)) for c in COLUMNAS_DATO}
+    registro["apto"] = bool(registro["apto"])
+    registro.update(numero_orden=int(numero), editado_por=usuario,
+                    fecha_edicion=marca, fecha_actualizacion=marca)
+    return registro
+
+
+def insertar(client, fila, usuario, intentos=INTENTOS_ALTA, ahora=None) -> int:
+    """Carga una entrevista nueva y devuelve el número de orden que le tocó.
+
+    INSERT y no upsert, a propósito: si dos personas cargan a la vez y piden el
+    mismo número, la segunda tiene que chocar y pedir otro. Con un upsert
+    reemplazaría en silencio a la entrevista que la primera acaba de cargar.
+    """
+    ultimo = None
+    for _ in range(intentos):
+        numero = siguiente_numero(client)
+        try:
+            client.table(TABLA).insert(
+                registro_de_alta(fila, numero, usuario, ahora)).execute()
+        except Exception as e:  # noqa: BLE001 — sólo se reintenta el choque de número
+            if not _es_clave_duplicada(e):
+                raise
+            ultimo = e
+        else:
+            return numero
+    raise NumeroOcupado(
+        "No se pudo asignar un número de orden: hay otras cargas al mismo tiempo."
+    ) from ultimo
+
+
+def plan_de_edicion(base, editado) -> pd.DataFrame:
+    """Qué cambió entre las entrevistas que se abrieron para editar y cómo quedaron.
+
+    `base` y `editado` traen las mismas filas con las columnas del formulario
+    (una sola, desde la ficha, o las de la grilla). Devuelve las modificadas en
+    valores canónicos, cada una con `cambios`: (campo, antes, después). Pasa por
+    el mismo comparador que una importación, así que un espacio de más o
+    «11222333» contra 11222333 tampoco cuentan acá como cambio.
+    """
+    return plan_de_carga(canonizar_base(editado), base)["modificadas"]
+
+
+def separar_conflictos(modificadas, frescas) -> tuple:
+    """(aplicables, conflictos) contra lo que la base tiene AHORA.
+
+    `frescas` es la relectura de esas entrevistas. Por cada celda a cambiar:
+      · la base ya tiene el valor pedido → no hay nada que hacer. Es lo que
+        pasa al repetir un guardado que quedó a medias.
+      · la base no tiene lo que se vio al empezar a editar → otra persona la
+        cambió mientras tanto. Va a `conflictos` y no se pisa.
+      · sigue como estaba → va a `aplicables`.
+    `aplicables` es {numero: {campo: valor nuevo}}; `conflictos`, una lista de
+    (numero, campo).
+    """
+    ahora = {f["numero_orden"]: f
+             for f in canonizar_base(frescas)[COLUMNAS_FORM].to_dict("records")}
+    aplicables: dict = {}
+    conflictos = []
+    for numero, cambios in zip(modificadas["numero_orden"], modificadas["cambios"]):
+        actual = ahora.get(numero)
+        for campo, antes, despues in cambios:
+            if actual is None or actual[campo] not in (antes, despues):
+                conflictos.append((numero, campo))
+            elif actual[campo] != despues:
+                aplicables.setdefault(numero, {})[campo] = despues
+    return aplicables, conflictos
+
+
+def agrupar_cambios(aplicables) -> list:
+    """Junta las entrevistas que reciben exactamente el mismo cambio.
+
+    Devuelve [(campos, numeros)]. Poner el mismo sector a 300 entrevistas es un
+    solo grupo —un puñado de pedidos a la base—, no 300.
+    """
+    grupos: dict = {}
+    for numero, campos in aplicables.items():
+        grupos.setdefault(tuple(sorted(campos.items())), []).append(numero)
+    return [(dict(clave), sorted(numeros)) for clave, numeros in grupos.items()]
+
+
+def aplicar_cambios(client, grupos, usuario, lote=LOTE_NUMEROS, ahora=None) -> int:
+    """Escribe los cambios en la base y devuelve cuántas entrevistas tocó.
+
+    Un UPDATE por grupo, sólo con los campos que cambian: lo que el usuario no
+    tocó no viaja, así que no puede pisar lo que otra persona haya corregido en
+    esa misma entrevista. Además sella quién y cuándo.
+
+    Lanza `EscrituraIncompleta` si la base modifica menos filas de las pedidas.
+    PostgREST no da error cuando un UPDATE no alcanza ninguna fila: sin este
+    control, un guardado que no guardó se informaría como hecho.
+    """
+    marca = (ahora or datetime.now(timezone.utc)).isoformat()
+    sello = {"editado_por": usuario, "fecha_edicion": marca, "fecha_actualizacion": marca}
+    tocadas = 0
+    for campos, numeros in grupos:
+        valores = {c: _nativo(v) for c, v in campos.items()}
+        for i in range(0, len(numeros), lote):
+            parte = [int(n) for n in numeros[i:i + lote]]
+            resp = (client.table(TABLA).update({**valores, **sello})
+                    .in_("numero_orden", parte).execute())
+            hechas = len(resp.data or [])
+            if hechas != len(parte):
+                raise EscrituraIncompleta(
+                    f"La base modificó {hechas} de {len(parte)} entrevistas.")
+            tocadas += hechas
+    return tocadas
+
+
+def leer_numeros(client, numeros, lote=LOTE_NUMEROS) -> pd.DataFrame:
+    """Esas entrevistas, tal como están en la base en este momento."""
+    numeros = [int(n) for n in numeros]
+    filas: list = []
+    for i in range(0, len(numeros), lote):
+        resp = (client.table(TABLA).select(",".join(COLUMNAS_DB))
+                .in_("numero_orden", numeros[i:i + lote]).execute())
+        filas.extend(resp.data or [])
+    return pd.DataFrame(filas, columns=COLUMNAS_DB)
+
+
+def guardar_edicion(client, modificadas, usuario, ahora=None) -> dict:
+    """Guarda una edición —de una entrevista o de un lote— sin pisar lo ajeno.
+
+    Relee esas entrevistas, deja afuera las celdas que otra persona cambió
+    mientras tanto y escribe el resto campo por campo. Devuelve:
+      · guardadas   cuántas entrevistas se modificaron.
+      · por_campo   {campo: cuántas entrevistas}. Es lo que va a la auditoría.
+      · conflictos  [(numero, campo)] que NO se guardaron.
+    Si falla a mitad de camino se puede repetir: lo que ya entró no se vuelve a
+    escribir ni aparece como conflicto.
+    """
+    numeros = modificadas["numero_orden"].tolist()
+    aplicables, conflictos = separar_conflictos(modificadas, leer_numeros(client, numeros))
+    aplicar_cambios(client, agrupar_cambios(aplicables), usuario, ahora=ahora)
+    por_campo: dict = {}
+    for campos in aplicables.values():
+        for campo in campos:
+            por_campo[campo] = por_campo.get(campo, 0) + 1
+    return {"guardadas": len(aplicables), "por_campo": por_campo, "conflictos": conflictos}
+
+
+def marcar_anulada(client, numero, anulada, usuario, ahora=None) -> None:
+    """Anula una entrevista o la restaura. Nunca la borra."""
+    aplicar_cambios(client, [({"anulada": bool(anulada)}, [numero])], usuario, ahora=ahora)
+
+
 # ─── Columnas derivadas ──────────────────────────────────────
 DERIVADAS = ["apenom", "puesto_grupo", "sector_norm", "entrevistador_norm",
              "dni_valido", "veces", "con_notas", "en_blanco", "_texto"]
@@ -728,12 +1011,18 @@ def enriquecer(df) -> pd.DataFrame:
     if out.empty:
         for c in DERIVADAS:
             out[c] = pd.Series(dtype=object)
+        if "anulada" not in out.columns:
+            out["anulada"] = pd.Series(dtype=bool)
         return out
 
     out["numero_orden"] = pd.to_numeric(out["numero_orden"], errors="coerce").astype(int)
     out["fecha"] = out["fecha"].map(to_date)
     out["dni"] = pd.to_numeric(out["dni"], errors="coerce").astype("Int64")
     out["apto"] = out["apto"].map(canon_apto)
+    # Una vista previa de importación todavía no tiene la columna: no hay
+    # anuladas entre filas que ni entraron a la base.
+    out["anulada"] = (out["anulada"].map(canon_apto).astype(bool)
+                      if "anulada" in out.columns else False)
     for c in COLUMNAS_TEXTO:
         out[c] = out[c].map(lambda v: "" if _vacio(v) else str(v).strip())
 
@@ -745,8 +1034,10 @@ def enriquecer(df) -> pd.DataFrame:
     # El DNI 0 o vacío es "sin dato": si agrupara, las 263 entrevistas sin DNI
     # figurarían como una misma persona que se presentó 263 veces.
     out["dni_valido"] = (out["dni"].notna() & (out["dni"] > 0)).fillna(False).astype(bool)
-    por_dni = out.loc[out["dni_valido"], "dni"].value_counts()
-    out["veces"] = [int(por_dni[d]) if ok else 1
+    # Una anulada no es una presentación: si se cargó dos veces la misma
+    # entrevista y una se anuló, la persona se presentó una vez.
+    por_dni = out.loc[out["dni_valido"] & ~out["anulada"], "dni"].value_counts()
+    out["veces"] = [max(int(por_dni.get(d, 0)), 1) if ok else 1
                     for d, ok in zip(out["dni"], out["dni_valido"])]
 
     out["con_notas"] = (out["motivo_rechazo"] != "") | (out["observaciones"] != "")
@@ -977,6 +1268,29 @@ def opciones(df, columna) -> list:
     return sorted(conteo.index, key=lambda v: (-conteo[v], v))
 
 
+def sugerencias(df, columna, minimo=3) -> list:
+    """Valores ya usados en una columna de texto libre, para ofrecerlos al cargar.
+
+    Junta las grafías que sólo difieren en tildes, mayúsculas o espacios y deja
+    la más frecuente de cada una, de la más usada a la menos usada. Lo que
+    aparece menos de `minimo` veces queda afuera: casi siempre es un error de
+    tipeo, y ofrecerlo en la lista sería invitar a repetirlo.
+    """
+    if df.empty or columna not in df.columns:
+        return []
+    valores = df[columna].map(lambda v: "" if _vacio(v) else str(v).strip())
+    valores = valores[valores != ""]
+    tabla = pd.DataFrame({"clave": valores.map(norm), "valor": valores})
+    grupos = []
+    for clave, parte in tabla.groupby("clave"):
+        if len(parte) < minimo:
+            continue
+        frecuencia = parte["valor"].value_counts()
+        grafia = sorted(frecuencia.index, key=lambda g: (-frecuencia[g], g))[0]
+        grupos.append((-len(parte), clave, grafia))
+    return [grafia for _n, _clave, grafia in sorted(grupos)]
+
+
 # ─── Historial de una persona ────────────────────────────────
 def historial(df, numero_orden) -> pd.DataFrame:
     """Las OTRAS entrevistas de la misma persona (mismo DNI), de vieja a nueva.
@@ -988,7 +1302,8 @@ def historial(df, numero_orden) -> pd.DataFrame:
     if fila.empty or not bool(fila.iloc[0]["dni_valido"]):
         return df.iloc[0:0]
     dni = fila.iloc[0]["dni"]
-    otras = df[df["dni_valido"] & (df["dni"] == dni) & (df["numero_orden"] != numero_orden)]
+    otras = df[df["dni_valido"] & (df["dni"] == dni) & ~df["anulada"]
+               & (df["numero_orden"] != numero_orden)]
     return otras.sort_values("numero_orden")
 
 
@@ -1001,7 +1316,8 @@ def apellidos_distintos(df, numero_orden) -> bool:
     fila = df[df["numero_orden"] == numero_orden]
     if fila.empty or not bool(fila.iloc[0]["dni_valido"]):
         return False
-    mismos = df[df["dni_valido"] & (df["dni"] == fila.iloc[0]["dni"])]
+    mismos = df[df["dni_valido"] & (df["dni"] == fila.iloc[0]["dni"])
+                & (~df["anulada"] | (df["numero_orden"] == numero_orden))]
     return mismos["apellido"].map(norm).replace("", pd.NA).dropna().nunique() > 1
 
 
@@ -1047,7 +1363,13 @@ def resumen(df, tope=15) -> dict:
 
 
 def ultima_actualizacion(df):
-    """(momento, quién) de la última vez que se actualizó desde Access, o (None, "")."""
+    """(momento, quién) del último cambio del registro, o (None, "").
+
+    Cuenta tanto una importación como una carga o edición a mano. Lo hecho a
+    mano sella `fecha_edicion` con el mismo instante que `fecha_actualizacion`:
+    por eso, si coinciden, el «quién» es el que editó y no el que importó la
+    fila alguna vez.
+    """
     if df.empty or "fecha_actualizacion" not in df.columns:
         return None, ""
     momentos = pd.to_datetime(df["fecha_actualizacion"], errors="coerce", utc=True)
@@ -1055,6 +1377,10 @@ def ultima_actualizacion(df):
         return None, ""
     i = momentos.idxmax()
     quien = df.loc[i, "importado_por"] if "importado_por" in df.columns else ""
+    if "fecha_edicion" in df.columns:
+        edicion = pd.to_datetime(df.loc[i, "fecha_edicion"], errors="coerce", utc=True)
+        if not pd.isna(edicion) and edicion == momentos[i]:
+            quien = df.loc[i, "editado_por"]
     return momentos[i], ("" if _vacio(quien) else str(quien))
 
 

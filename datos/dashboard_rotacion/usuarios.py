@@ -40,7 +40,7 @@ LARGO_MINIMO_PASSWORD = 8
 # en los DataFrames de la pantalla de administración.
 COLUMNAS = ["usuario", "nombre", "activo", "es_admin",
             "edit_adelantos", "edit_descuentos", "edit_seguimiento", "edit_minutas",
-            "ver_postulantes",
+            "ver_postulantes", "edit_postulantes",
             "debe_cambiar_password", "fecha_alta", "creado_por", "ultimo_acceso"]
 
 # ─── Catálogo de permisos ────────────────────────────────────
@@ -59,9 +59,25 @@ PERMISOS = [
     # Las notas del registro tienen datos delicados de postulantes.
     ("ver_postulantes",  "Postulantes",
      "Ver el registro de entrevistas a postulantes (con motivos y "
-     "observaciones) y actualizarlo desde Access"),
+     "observaciones)"),
+    ("edit_postulantes", "Postulantes: cargar y editar",
+     "Cargar entrevistas nuevas, editar o anular las cargadas e importar "
+     "archivos. Incluye ver la pestaña"),
 ]
 CLAVES_PERMISO = [c for c, _l, _d in PERMISOS]
+
+
+def con_dependencias(permisos):
+    """Los permisos tal como se guardan: cargar Postulantes implica verlos.
+
+    La pestaña se corta para quien no tiene `ver_postulantes`, así que el
+    permiso de edición solo sería una cuenta que no puede usar lo que le dieron.
+    Devuelve un dict nuevo; no toca el que recibe.
+    """
+    out = dict(permisos)
+    if out.get("edit_postulantes"):
+        out["ver_postulantes"] = True
+    return out
 
 
 def hash_password(password):
@@ -191,11 +207,13 @@ def crear(usuario, nombre, password, permisos, es_admin=False, creado_por=None):
         "debe_cambiar_password": True,
         "creado_por": creado_por,
     }
+    permisos = con_dependencias(permisos)
     fila.update({c: bool(permisos.get(c)) for c in CLAVES_PERMISO})
     get_supabase().table(TABLA).insert(fila).execute()
 
 
 def actualizar_permisos(usuario, permisos, es_admin=None):
+    permisos = con_dependencias(permisos)
     cambios = {c: bool(permisos.get(c)) for c in CLAVES_PERMISO}
     if es_admin is not None:
         cambios["es_admin"] = bool(es_admin)

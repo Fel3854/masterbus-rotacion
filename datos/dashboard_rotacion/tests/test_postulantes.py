@@ -939,14 +939,25 @@ class _Consulta:
         self.cliente = cliente
         self.rango = None
         self.es_upsert = False
+        self.fila_nueva = None
+        self.valores = None
+        self.filtro = None
+        self.descendente = None
+        self.tope = None
 
     def select(self, columnas, **opciones):
         self.cliente.selects.append(columnas)
         self.cliente.opciones_select.append(opciones)
         return self
 
-    def order(self, columna):
+    def order(self, columna, desc=False):
         self.cliente.ordenes.append(columna)
+        if desc:
+            self.descendente = columna
+        return self
+
+    def limit(self, n):
+        self.tope = n
         return self
 
     def range(self, desde, hasta):
@@ -954,30 +965,81 @@ class _Consulta:
         self.cliente.rangos.append(self.rango)
         return self
 
+    def in_(self, columna, valores):
+        self.filtro = (columna, list(valores))
+        return self
+
     def upsert(self, filas, **opciones):
         self.es_upsert = True
         self.cliente.upserts.append((list(filas), opciones))
         return self
 
+    def insert(self, fila):
+        self.fila_nueva = dict(fila)
+        return self
+
+    def update(self, valores):
+        self.valores = dict(valores)
+        return self
+
     def execute(self):
+        c = self.cliente
         if self.es_upsert:
             return SimpleNamespace(data=None)
-        desde, hasta = self.rango
-        return SimpleNamespace(data=self.cliente.filas[desde:hasta + 1])
+        if self.fila_nueva is not None:
+            numero = self.fila_nueva["numero_orden"]
+            c.inserts.append(self.fila_nueva)
+            if c.choques:
+                # Otra persona cargó justo antes y se quedó con ese número.
+                c.choques -= 1
+                c.filas.append(_fila(numero, apellido="LA OTRA CARGA"))
+            if any(f["numero_orden"] == numero for f in c.filas):
+                raise RuntimeError(
+                    "duplicate key value violates unique constraint (23505)")
+            c.filas.append({**_fila(numero), **self.fila_nueva})
+            return SimpleNamespace(data=[self.fila_nueva])
+
+        elegidas = c.filas
+        if self.filtro is not None:
+            columna, valores = self.filtro
+            elegidas = [f for f in elegidas
+                        if f[columna] in valores and f[columna] not in c.ocultas]
+        if self.valores is not None:
+            c.updates.append((self.valores, self.filtro[1]))
+            for f in elegidas:
+                f.update(self.valores)
+        elif self.descendente:
+            elegidas = sorted(elegidas, key=lambda f: f[self.descendente], reverse=True)
+        if self.tope is not None:
+            elegidas = elegidas[:self.tope]
+        if self.rango is not None:
+            desde, hasta = self.rango
+            elegidas = elegidas[desde:hasta + 1]
+        return SimpleNamespace(data=[dict(f) for f in elegidas])
 
 
 class _Cliente:
-    """Imita lo justo de supabase-py, incluido el tope de filas por consulta."""
+    """Imita lo justo de supabase-py, incluido el tope de filas por consulta.
 
-    def __init__(self, filas=()):
+    `choques` es cuántas altas encuentran su número recién tomado por otra
+    persona; `ocultas`, números que la base no deja tocar (lo que hace RLS: no
+    da error, simplemente no alcanza la fila).
+    """
+
+    def __init__(self, filas=(), choques=0, ocultas=()):
         self.filas = list(filas)
         self.tablas, self.selects, self.ordenes = [], [], []
         self.opciones_select = []
         self.rangos, self.upserts = [], []
+        self.inserts, self.updates = [], []
+        self.choques, self.ocultas = choques, set(ocultas)
 
     def table(self, nombre):
         self.tablas.append(nombre)
         return _Consulta(self)
+
+    def fila(self, numero):
+        return next(f for f in self.filas if f["numero_orden"] == numero)
 
 
 def test_leer_todo_pagina_y_trae_mas_de_mil_filas():
@@ -1029,6 +1091,407 @@ def test_upsert_sin_registros_no_llama_a_la_base():
     cliente = _Cliente()
     assert pt.upsert(cliente, []) == 0
     assert cliente.upserts == []
+
+
+# ─── Alta en el dashboard ────────────────────────────────────
+AHORA = datetime(2026, 10, 5, 15, 0, tzinfo=timezone.utc)
+SELLO = "2026-10-05T15:00:00+00:00"
+
+
+def _nueva(**campos):
+    """Una entrevista tal como sale del formulario, ya en valores canónicos."""
+    return pt.canonizar_fila(campos)
+
+
+def test_siguiente_numero_es_el_mayor_mas_uno():
+    """Se cuenta sobre toda la tabla —huecos, anuladas y renglones en blanco
+    incluidos—: un número usado no se vuelve a usar."""
+    cliente = _Cliente([_fila(1), _fila(2), _fila(7, anulada=True), _fila(5)])
+    assert pt.siguiente_numero(cliente) == 8
+    assert pt.siguiente_numero(_Cliente()) == 1
+
+
+def test_el_registro_de_alta_lleva_el_sello_de_quien_la_cargo():
+    fila = _nueva(apellido=" Alfa ", nombres="Ana", dni="11.222.333",
+                  fecha=date(2026, 10, 5), apto=True, observaciones="")
+    registro = pt.registro_de_alta(fila, 2844, "Ana", ahora=AHORA)
+
+    json.dumps(registro)
+    assert registro["numero_orden"] == 2844 and type(registro["numero_orden"]) is int
+    assert registro["apellido"] == "Alfa" and registro["dni"] == 11222333
+    assert registro["fecha"] == "2026-10-05" and registro["apto"] is True
+    assert registro["observaciones"] is None and registro["puesto"] is None
+    assert registro["editado_por"] == "Ana"
+    assert registro["fecha_edicion"] == registro["fecha_actualizacion"] == SELLO
+    # No vino de un archivo, y la fecha de entrada la pone la base.
+    assert "importado_por" not in registro and "fecha_importacion" not in registro
+    assert set(registro) <= set(pt.COLUMNAS_DB)
+
+
+def test_el_alta_es_un_insert_y_nunca_un_upsert():
+    """Un upsert sobre un número ya tomado reemplazaría a otra persona."""
+    cliente = _Cliente([_fila(1, apellido="UNO"), _fila(2, apellido="DOS")])
+    numero = pt.insertar(cliente, _nueva(apellido="ALFA"), "Ana", ahora=AHORA)
+
+    assert numero == 3
+    assert cliente.upserts == [] and len(cliente.inserts) == 1
+    assert cliente.fila(3)["apellido"] == "ALFA"
+    assert set(cliente.tablas) == {pt.TABLA}
+
+
+def test_si_otro_tomo_el_numero_el_alta_reintenta_con_el_siguiente():
+    cliente = _Cliente([_fila(1, apellido="UNO")], choques=1)
+    numero = pt.insertar(cliente, _nueva(apellido="ALFA"), "Ana", ahora=AHORA)
+
+    assert numero == 3
+    # La carga que ganó el número 2 sigue ahí, intacta.
+    assert cliente.fila(2)["apellido"] == "LA OTRA CARGA"
+    assert cliente.fila(3)["apellido"] == "ALFA"
+    assert [r["numero_orden"] for r in cliente.inserts] == [2, 3]
+
+
+def test_si_el_numero_sigue_ocupado_el_alta_falla_sin_pisar_a_nadie():
+    cliente = _Cliente([_fila(1)], choques=10)
+    with pytest.raises(pt.NumeroOcupado):
+        pt.insertar(cliente, _nueva(apellido="ALFA"), "Ana", intentos=3)
+    assert len(cliente.inserts) == 3
+    assert all(f["apellido"] != "ALFA" for f in cliente.filas)
+
+
+def test_el_alta_no_reintenta_un_error_que_no_es_de_numero():
+    class _Caida(_Cliente):
+        def table(self, nombre):
+            raise ConnectionError("sin red")
+
+    with pytest.raises(ConnectionError):
+        pt.insertar(_Caida(), _nueva(apellido="ALFA"), "Ana")
+
+
+@pytest.mark.parametrize("texto, esperado", [
+    ("11222333", 11222333), ("11.222.333", 11222333), (" 11 222 333 ", 11222333),
+    ("", None), ("   ", None), (None, None),
+])
+def test_leer_dni_acepta_puntos_espacios_y_vacio(texto, esperado):
+    assert pt.leer_dni(texto) == (esperado, "")
+
+
+@pytest.mark.parametrize("texto", ["no tiene", "11222333k", "0", "-5"])
+def test_leer_dni_no_guarda_como_vacio_algo_que_no_es_un_numero(texto):
+    dni, error = pt.leer_dni(texto)
+    assert dni is None and error
+
+
+def test_canonizar_fila_completa_lo_que_falta_y_limpia_lo_que_viene():
+    fila = pt.canonizar_fila({"apellido": "  Alfa ", "dni": "11.222.333", "apto": "Sí"})
+    assert set(fila) == set(pt.COLUMNAS_DATO)
+    assert (fila["apellido"], fila["dni"], fila["apto"]) == ("Alfa", 11222333, True)
+    assert fila["fecha"] is None and fila["nombres"] is None
+
+
+def test_un_alta_necesita_apellido_dni_creible_y_fecha_que_no_sea_futura():
+    hoy = date(2026, 10, 5)
+    bien = _nueva(apellido="ALFA", dni=11222333, fecha=hoy)
+    assert pt.validar_entrevista(bien, alta=True, hoy=hoy) == []
+    assert pt.validar_entrevista(_nueva(apellido="ALFA"), alta=True, hoy=hoy) == []   # sin DNI ni fecha vale
+
+    assert len(pt.validar_entrevista(_nueva(nombres="Ana"), alta=True, hoy=hoy)) == 1
+    assert len(pt.validar_entrevista(_nueva(apellido="ALFA", dni=1122), alta=True, hoy=hoy)) == 1
+    assert len(pt.validar_entrevista(
+        _nueva(apellido="ALFA", fecha=date(2026, 10, 6)), alta=True, hoy=hoy)) == 1
+
+
+def test_una_edicion_solo_valida_los_campos_que_cambiaron():
+    """El histórico tiene DNI raros: eso no puede impedir corregir otra cosa."""
+    vieja = _nueva(apellido="ALFA", dni=1122, fecha=date(2030, 1, 1))
+    hoy = date(2026, 10, 5)
+    assert pt.validar_entrevista(vieja, campos=["sector"], hoy=hoy) == []
+    assert len(pt.validar_entrevista(vieja, campos=["dni"], hoy=hoy)) == 1
+    assert len(pt.validar_entrevista(vieja, campos=["dni", "fecha"], hoy=hoy)) == 2
+
+
+def test_posibles_duplicados_son_la_misma_persona_con_la_misma_fecha():
+    e = _enriquecida(
+        _fila(1, apellido="ALFA", dni=11222333, fecha="2026-10-05"),
+        _fila(2, apellido="ALFA", dni=11222333, fecha="2026-09-01"),
+        _fila(3, apellido="ALFA", dni=11222333, fecha="2026-10-05", anulada=True),
+        _fila(4, apellido="BETA", dni=22333444, fecha="2026-10-05"),
+    )
+    assert _numeros(pt.posibles_duplicados(e, "11.222.333", date(2026, 10, 5))) == [1]
+    assert pt.posibles_duplicados(e, 11222333, date(2026, 10, 6)).empty
+    # Sin DNI o sin fecha no hay forma de saberlo.
+    assert pt.posibles_duplicados(e, None, date(2026, 10, 5)).empty
+    assert pt.posibles_duplicados(e, 11222333, None).empty
+
+
+def test_sugerencias_junta_grafias_y_deja_afuera_lo_poco_usado():
+    e = _enriquecida(
+        *[_fila(i, puesto="CONDUCTOR") for i in range(1, 6)],
+        *[_fila(i, puesto="Conductor ") for i in range(6, 8)],
+        *[_fila(i, puesto="Mecánico") for i in range(8, 11)],
+        _fila(11, puesto="CONDCUTOR"), _fila(12, puesto=None),
+    )
+    assert pt.sugerencias(e, "puesto") == ["CONDUCTOR", "Mecánico"]
+    assert pt.sugerencias(e, "puesto", minimo=1) == ["CONDUCTOR", "Mecánico", "CONDCUTOR"]
+    assert pt.sugerencias(e, "no_existe") == []
+
+
+# ─── Edición ─────────────────────────────────────────────────
+def _editada(base, numero, **campos):
+    """Copia de `base` con una entrevista cambiada, como la devuelve la pantalla."""
+    out = base[pt.COLUMNAS_FORM].astype(object)
+    for campo, valor in campos.items():
+        out.loc[out["numero_orden"] == numero, campo] = valor
+    return out
+
+
+def test_plan_de_edicion_trae_solo_las_celdas_que_cambiaron():
+    base = _base(_fila(1, apellido="ALFA", sector="Trafico", observaciones="PREOCU"),
+                 _fila(2, apellido="BETA", sector="Taller"))
+    plan = pt.plan_de_edicion(base, _editada(base, 1, sector="TRAFICO"))
+
+    assert plan["numero_orden"].tolist() == [1]
+    assert plan.iloc[0]["cambios"] == [("sector", "Trafico", "TRAFICO")]
+    assert pt.plan_de_edicion(base, base[pt.COLUMNAS_FORM].copy()).empty
+
+
+def test_plan_de_edicion_no_cuenta_como_cambio_lo_que_es_solo_formato():
+    """La grilla devuelve el DNI como texto, la fecha como Timestamp y los
+    vacíos como cadena vacía: nada de eso es una edición."""
+    base = _base(_fila(1, apellido="ALFA", dni=11222333, fecha="2026-09-24",
+                       sector="Trafico", apto=True))
+    editado = pd.DataFrame([{
+        "numero_orden": 1, "entrevistador": "", "fecha": pd.Timestamp("2026-09-24"),
+        "apellido": " ALFA ", "nombres": "", "dni": "11.222.333", "puesto": None,
+        "sector": "Trafico", "apto": True, "motivo_rechazo": "", "observaciones": "",
+    }])
+    assert pt.plan_de_edicion(base, editado).empty
+
+
+def test_vaciar_una_celda_es_un_cambio():
+    base = _base(_fila(1, apellido="ALFA", dni=11222333, fecha="2026-09-24"))
+    plan = pt.plan_de_edicion(base, _editada(base, 1, dni="", fecha=pd.NaT))
+    assert sorted(plan.iloc[0]["cambios"]) == [("dni", 11222333, None),
+                                               ("fecha", "2026-09-24", None)]
+
+
+def test_agrupar_cambios_junta_las_entrevistas_con_el_mismo_cambio():
+    grupos = pt.agrupar_cambios({
+        3: {"sector": "TRAFICO"}, 1: {"sector": "TRAFICO"},
+        2: {"sector": "TRAFICO", "apto": True}, 4: {"sector": "TALLER"},
+    })
+    assert sorted(grupos, key=lambda g: g[1]) == [
+        ({"sector": "TRAFICO"}, [1, 3]),
+        ({"apto": True, "sector": "TRAFICO"}, [2]),
+        ({"sector": "TALLER"}, [4]),
+    ]
+    assert pt.agrupar_cambios({}) == []
+
+
+def test_aplicar_cambios_manda_solo_lo_que_cambia_y_sella_quien_y_cuando():
+    cliente = _Cliente([_fila(1, apellido="ALFA", sector="Trafico", observaciones="PREOCU")])
+    assert pt.aplicar_cambios(cliente, [({"sector": "TRAFICO"}, [1])], "Ana", ahora=AHORA) == 1
+
+    valores, numeros = cliente.updates[0]
+    assert numeros == [1]
+    assert valores == {"sector": "TRAFICO", "editado_por": "Ana",
+                       "fecha_edicion": SELLO, "fecha_actualizacion": SELLO}
+    # Lo que no se tocó no viajó, así que sigue como estaba.
+    assert cliente.fila(1)["observaciones"] == "PREOCU"
+    assert cliente.upserts == [] and cliente.inserts == []
+
+
+def test_aplicar_cambios_parte_los_numeros_en_lotes():
+    cliente = _Cliente(_fila(i) for i in range(1, 451))
+    tocadas = pt.aplicar_cambios(cliente, [({"sector": "X"}, list(range(1, 451)))], "Ana")
+    assert tocadas == 450
+    assert [len(numeros) for _v, numeros in cliente.updates] == [200, 200, 50]
+    assert all(f["sector"] == "X" for f in cliente.filas)
+
+
+def test_aplicar_cambios_avisa_si_la_base_modifico_menos_filas():
+    """PostgREST no da error cuando un UPDATE no alcanza la fila: sin este
+    control, un guardado que no guardó se informaría como hecho."""
+    cliente = _Cliente([_fila(1), _fila(2)], ocultas=[2])
+    with pytest.raises(pt.EscrituraIncompleta):
+        pt.aplicar_cambios(cliente, [({"sector": "X"}, [1, 2])], "Ana")
+
+
+def test_guardar_edicion_escribe_el_campo_cambiado_y_deja_el_resto():
+    cliente = _Cliente([
+        _fila(1, apellido="ALFA", sector="Trafico", observaciones="PREOCU"),
+        _fila(2, apellido="BETA", sector="Trafico", dni=22333444),
+        _fila(3, apellido="GAMA", sector="Taller"),
+    ])
+    base = pt.leer_todo(cliente)
+    editado = _editada(_editada(base, 1, sector="TRAFICO"), 2, sector="TRAFICO")
+    editado = _editada(editado, 2, dni="22.333.445")
+    resultado = pt.guardar_edicion(cliente, pt.plan_de_edicion(base, editado), "Ana", ahora=AHORA)
+
+    assert resultado == {"guardadas": 2, "por_campo": {"sector": 2, "dni": 1}, "conflictos": []}
+    assert cliente.fila(1)["sector"] == "TRAFICO" and cliente.fila(1)["observaciones"] == "PREOCU"
+    assert cliente.fila(2)["dni"] == 22333445 and cliente.fila(2)["editado_por"] == "Ana"
+    assert cliente.fila(3)["sector"] == "Taller" and cliente.fila(3)["editado_por"] is None
+    assert all("numero_orden" not in valores for valores, _n in cliente.updates)
+
+
+def test_dos_personas_editando_campos_distintos_no_se_pisan():
+    cliente = _Cliente([_fila(1, apellido="ALFA", sector="Trafico", observaciones="PREOCU")])
+    base = pt.leer_todo(cliente)                       # lo que vio quien edita en lote
+    cliente.fila(1)["observaciones"] = "OK PREOCU"     # mientras tanto, otra persona
+    pt.guardar_edicion(cliente, pt.plan_de_edicion(base, _editada(base, 1, sector="TRAFICO")), "Ana")
+
+    assert cliente.fila(1)["sector"] == "TRAFICO"
+    assert cliente.fila(1)["observaciones"] == "OK PREOCU"
+
+
+def test_si_otra_persona_cambio_esa_misma_celda_no_se_pisa_y_se_avisa():
+    cliente = _Cliente([_fila(1, apellido="ALFA", observaciones="PREOCU", sector="Trafico")])
+    base = pt.leer_todo(cliente)
+    cliente.fila(1)["observaciones"] = "OK PREOCU"
+    editado = _editada(_editada(base, 1, observaciones="PREOCU - LLAMAR"), 1, sector="TRAFICO")
+    resultado = pt.guardar_edicion(cliente, pt.plan_de_edicion(base, editado), "Ana")
+
+    assert resultado["conflictos"] == [(1, "observaciones")]
+    assert resultado["guardadas"] == 1 and resultado["por_campo"] == {"sector": 1}
+    assert cliente.fila(1)["observaciones"] == "OK PREOCU"      # gana lo que ya estaba
+    assert cliente.fila(1)["sector"] == "TRAFICO"               # el resto se guardó
+
+
+def test_repetir_un_guardado_no_escribe_de_nuevo_ni_inventa_conflictos():
+    """Si un lote falló a mitad de camino, volver a guardar lo completa."""
+    cliente = _Cliente([_fila(1, sector="Trafico"), _fila(2, sector="Trafico")])
+    base = pt.leer_todo(cliente)
+    plan = pt.plan_de_edicion(base, _editada(_editada(base, 1, sector="X"), 2, sector="Y"))
+    cliente.fila(1)["sector"] = "X"                    # la primera pasada llegó a guardar ésta
+    resultado = pt.guardar_edicion(cliente, plan, "Ana")
+
+    assert resultado == {"guardadas": 1, "por_campo": {"sector": 1}, "conflictos": []}
+    assert [numeros for _v, numeros in cliente.updates] == [[2]]
+    assert pt.guardar_edicion(cliente, plan, "Ana")["guardadas"] == 0
+
+
+def test_guardar_sin_cambios_no_llama_a_la_base():
+    cliente = _Cliente([_fila(1, sector="Trafico")])
+    base = pt.leer_todo(cliente)
+    antes = len(cliente.tablas)
+    resultado = pt.guardar_edicion(cliente, pt.plan_de_edicion(base, base.copy()), "Ana")
+    assert resultado["guardadas"] == 0 and len(cliente.tablas) == antes
+
+
+def test_describir_cambios_muestra_las_fechas_como_se_leen_en_pantalla():
+    assert pt.describir_cambios([("fecha", "2026-09-05", "2026-09-24")]) == \
+        "Fecha: 05/09/2026 → 24/09/2026"
+    assert pt.describir_cambios([("fecha", None, "2026-09-24")]) == \
+        "Fecha: (vacío) → 24/09/2026"
+
+
+def test_el_ultimo_cambio_hecho_a_mano_se_le_atribuye_a_quien_edito():
+    e = _enriquecida(
+        _fila(1, importado_por="Uno", fecha_actualizacion="2026-10-01T12:00:00+00:00"),
+        _fila(2, importado_por="Uno", editado_por="Dos",
+              fecha_edicion="2026-10-05T12:00:00+00:00",
+              fecha_actualizacion="2026-10-05T12:00:00+00:00"),
+    )
+    momento, quien = pt.ultima_actualizacion(e)
+    assert (momento.day, quien) == (5, "Dos")
+
+
+def test_si_una_importacion_piso_una_fila_editada_el_ultimo_cambio_es_del_que_importo():
+    e = _enriquecida(_fila(1, importado_por="Uno", editado_por="Dos",
+                           fecha_edicion="2026-10-05T12:00:00+00:00",
+                           fecha_actualizacion="2026-10-06T09:00:00+00:00"))
+    assert pt.ultima_actualizacion(e)[1] == "Uno"
+
+
+# ─── Anular ──────────────────────────────────────────────────
+def test_anular_marca_la_fila_y_restaurar_la_devuelve():
+    cliente = _Cliente([_fila(1, apellido="ALFA", observaciones="PREOCU")])
+    pt.marcar_anulada(cliente, 1, True, "Ana", ahora=AHORA)
+    assert cliente.fila(1)["anulada"] is True and cliente.fila(1)["editado_por"] == "Ana"
+    assert cliente.fila(1)["observaciones"] == "PREOCU"         # no se pierde nada
+    assert len(cliente.filas) == 1                              # ni se borra
+
+    pt.marcar_anulada(cliente, 1, False, "Ana")
+    assert cliente.fila(1)["anulada"] is False
+
+
+def test_una_entrevista_anulada_no_cuenta_como_presentacion():
+    e = _enriquecida(_fila(1, apellido="ALFA", dni=11222333),
+                     _fila(2, apellido="ALFA", dni=11222333, anulada=True),
+                     _fila(3, apellido="BETA", dni=22333444))
+    assert dict(zip(e["numero_orden"], e["veces"])) == {1: 1, 2: 1, 3: 1}
+    assert e["anulada"].tolist() == [False, True, False]        # de la más nueva a la más vieja
+    assert e["anulada"].dtype == bool
+
+
+def test_el_historial_no_muestra_las_anuladas():
+    e = _enriquecida(_fila(1, apellido="ALFA", dni=11222333),
+                     _fila(2, apellido="OMEGA", dni=11222333, anulada=True),
+                     _fila(3, apellido="ALFA", dni=11222333))
+    assert _numeros(pt.historial(e, 3)) == [1]
+    # El aviso de apellidos distintos tampoco salta por una anulada…
+    assert pt.apellidos_distintos(e, 3) is False
+    # …salvo que la que se está mirando sea justamente ésa.
+    assert pt.apellidos_distintos(e, 2) is True
+
+
+def test_enriquecer_acepta_una_tabla_sin_la_columna_de_anuladas():
+    """La vista previa de una importación sólo trae las columnas del formulario."""
+    crudo = pd.DataFrame([{c: None for c in pt.COLUMNAS_FORM}])
+    crudo["numero_orden"], crudo["apto"], crudo["apellido"] = 1, False, "ALFA"
+    assert pt.enriquecer(crudo)["anulada"].tolist() == [False]
+    vacia = pt.enriquecer(pd.DataFrame(columns=pt.COLUMNAS_FORM))
+    assert "anulada" in vacia.columns and vacia.empty
+
+
+# ─── Importar sin pisar lo hecho en el dashboard ─────────────
+def test_la_importacion_no_pisa_lo_cargado_o_editado_en_el_dashboard():
+    """Subir una copia de Access anterior a una corrección no la tiene que
+    deshacer; y un número que acá ya es de otra persona, menos."""
+    base = _base(
+        _fila(1, apellido="ALFA", sector="Trafico"),
+        _fila(2, apellido="BETA", sector="TRAFICO", fecha_edicion="2026-10-05T12:00:00+00:00"),
+        _fila(3, apellido="GAMA", editado_por="Ana", fecha_edicion="2026-10-05T12:00:00+00:00"),
+    )
+    archivo = pt.normalizar_archivo(_archivo(
+        _fila_archivo(1, apellido="ALFA", sector="Taller"),
+        _fila_archivo(2, apellido="BETA", sector="Trafico"),      # la versión vieja
+        _fila_archivo(3, apellido="OTRA PERSONA"),                # choque de número
+        _fila_archivo(4, apellido="DELTA"),
+    ))
+    plan = pt.plan_de_carga(archivo, base, proteger_editadas=True)
+
+    assert plan["nuevas"]["numero_orden"].tolist() == [4]
+    assert plan["modificadas"]["numero_orden"].tolist() == [1]
+    assert plan["protegidas"]["numero_orden"].tolist() == [2, 3]
+    assert plan["protegidas"].iloc[0]["cambios"] == [("sector", "TRAFICO", "Trafico")]
+
+    assert sorted(pt.a_cargar(plan)["numero_orden"]) == [1, 4]
+    assert sorted(pt.a_cargar(plan, pisar_protegidas=True)["numero_orden"]) == [1, 2, 3, 4]
+
+
+def test_una_fila_editada_que_el_archivo_trae_igual_no_tiene_nada_que_proteger():
+    base = _base(_fila(1, apellido="ALFA", fecha_edicion="2026-10-05T12:00:00+00:00"))
+    archivo = pt.normalizar_archivo(_archivo(_fila_archivo(1, apellido="ALFA")))
+    plan = pt.plan_de_carga(archivo, base, proteger_editadas=True)
+    assert plan["protegidas"].empty and plan["sin_cambios"] == 1
+
+
+def test_sin_pedirlo_el_plan_no_protege_nada():
+    """`plan_de_edicion` usa el mismo comparador: ahí lo editado es justo lo
+    que hay que poder cambiar."""
+    base = _base(_fila(1, apellido="ALFA", fecha_edicion="2026-10-05T12:00:00+00:00"))
+    archivo = pt.normalizar_archivo(_archivo(_fila_archivo(1, apellido="BETA")))
+    plan = pt.plan_de_carga(archivo, base)
+    assert plan["protegidas"].empty and len(plan["modificadas"]) == 1
+    assert len(pt.plan_de_edicion(base, _editada(base, 1, apellido="BETA"))) == 1
+
+
+def test_importar_no_toca_ni_el_sello_de_edicion_ni_la_anulacion():
+    """El upsert manda sólo las columnas del archivo: lo demás queda como está."""
+    archivo = pt.normalizar_archivo(_archivo(_fila_archivo(1, apellido="ALFA")))
+    registro = pt.registros_para_upsert(archivo, "Ana")[0]
+    assert not {"editado_por", "fecha_edicion", "anulada"} & set(registro)
 
 
 # ─── Exportación ─────────────────────────────────────────────
@@ -1127,6 +1590,60 @@ def test_el_ddl_no_habilita_borrar_el_registro():
 
 def test_el_ddl_agrega_el_permiso_a_usuarios():
     assert "ADD COLUMN IF NOT EXISTS VER_POSTULANTES" in " ".join(_ddl().upper().split())
+
+
+def _ddl_edicion():
+    """La migración que habilitó cargar y editar, sin comentarios y en una línea."""
+    with open(os.path.join(RAIZ, "migration_postulantes_edicion.sql"), encoding="utf-8") as fh:
+        lineas = [l.split("--", 1)[0] for l in fh.read().splitlines()]
+    return " ".join(" ".join(lineas).upper().split())
+
+
+def test_la_migracion_de_edicion_agrega_las_columnas_que_usa_el_modulo():
+    sql = _ddl_edicion()
+    for columna in ("editado_por", "fecha_edicion", "anulada"):
+        assert f"ADD COLUMN IF NOT EXISTS {columna.upper()}" in sql
+        assert columna in pt.COLUMNAS_DB
+    assert "ADD COLUMN EDIT_POSTULANTES BOOLEAN NOT NULL DEFAULT FALSE" in sql
+
+
+def test_la_migracion_de_edicion_tampoco_habilita_borrar():
+    """Se puede cargar, editar y anular; borrar sigue sin estar permitido."""
+    sql = _ddl_edicion()
+    assert "FOR DELETE" not in sql and "FOR ALL" not in sql
+    assert "DROP TABLE" not in sql and "DELETE FROM" not in sql and "TRUNCATE" not in sql
+
+
+def test_la_app_no_puede_leer_ni_escribir_el_historial():
+    """Tiene las mismas notas delicadas que el registro, y un respaldo que el
+    que edita puede corregir no es un respaldo: RLS activado y ninguna policy."""
+    sql = _ddl_edicion()
+    assert "ALTER TABLE ENTREVISTAS_POSTULANTES_HISTORIAL ENABLE ROW LEVEL SECURITY" in sql
+    assert "REVOKE ALL ON ENTREVISTAS_POSTULANTES_HISTORIAL FROM ANON, AUTHENTICATED" in sql
+    assert "CREATE POLICY" not in sql
+    assert "SECURITY DEFINER" in sql and "SET SEARCH_PATH = ''" in sql
+
+
+def test_el_historial_guarda_una_version_ante_cualquier_dato_que_cambie():
+    """Si mañana se agrega un campo al formulario y no entra en la condición
+    del trigger, sus ediciones no dejarían versión anterior."""
+    sql = _ddl_edicion()
+    condicion = sql.split("WHEN (", 1)[1].split("EXECUTE FUNCTION", 1)[0]
+    antes, despues = condicion.split("IS DISTINCT FROM")
+    assert "BEFORE UPDATE ON ENTREVISTAS_POSTULANTES" in sql
+    for campo in pt.COLUMNAS_DATO + ["anulada"]:
+        assert f"OLD.{campo.upper()}" in antes, campo
+        assert f"NEW.{campo.upper()}" in despues, campo
+
+
+def test_el_permiso_de_edicion_no_se_vuelve_a_regalar_si_se_repite_la_migracion():
+    """El UPDATE que da el permiso a quienes ya veían la pestaña va adentro del
+    IF que crea la columna: correrla dos veces no deshace lo que hizo el admin."""
+    sql = _ddl_edicion()
+    bloque = sql.split("DO $$", 1)[1].split("END $$", 1)[0]
+    assert "IF NOT EXISTS" in bloque and "COLUMN_NAME = 'EDIT_POSTULANTES'" in bloque
+    assert "UPDATE PUBLIC.USUARIOS SET EDIT_POSTULANTES = TRUE WHERE VER_POSTULANTES" in bloque
+    assert sql.count("SET EDIT_POSTULANTES = TRUE") == 1
 
 
 # ─── Archivo real (sólo en la máquina de quien lo tenga) ─────

@@ -32,6 +32,10 @@ CREATE TABLE IF NOT EXISTS usuarios (
     -- aparece. Se agregó después con un ALTER TABLE (ver
     -- migration_entrevistas_postulantes.sql); acá queda para instalaciones nuevas.
     ver_postulantes   BOOLEAN NOT NULL DEFAULT FALSE,
+    -- Cargar, editar, anular e importar en Postulantes. Se agregó después
+    -- (ver migration_postulantes_edicion.sql); la app lo guarda siempre junto
+    -- con ver_postulantes, porque sin ver la pestaña no hay dónde usarlo.
+    edit_postulantes  BOOLEAN NOT NULL DEFAULT FALSE,
 
     password_hash TEXT NOT NULL,
     -- Se levanta al crear la cuenta y al resetear la contraseña: quien la fijó

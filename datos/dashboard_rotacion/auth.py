@@ -18,7 +18,7 @@ Tres excepciones a esa regla:
   · `ver_postulantes` es el otro permiso de LECTURA: sin él la pestaña
     Postulantes ni aparece. El registro de entrevistas tiene notas delicadas
     de gente que en su mayoría nunca entró a la empresa. Ser admin no lo
-    incluye.
+    incluye. Cargar y editar el registro va aparte, con `edit_postulantes`.
 """
 
 from __future__ import annotations
@@ -342,9 +342,9 @@ def puede_ver_postulantes() -> bool:
     """True si el usuario puede ver el registro de entrevistas a postulantes.
 
     A diferencia del resto de las secciones, ésta no es visible para todos: las
-    notas tienen datos delicados de postulantes. El mismo permiso habilita
-    actualizar el registro desde Access. Se administra desde la pestaña Usuarios
-    y ser admin no lo incluye.
+    notas tienen datos delicados de postulantes. Es sólo de lectura: cargar,
+    editar e importar piden además `can_edit("postulantes")`. Se administra
+    desde la pestaña Usuarios y ser admin no lo incluye.
     """
     u = current_user()
     return bool(u and u.get("ver_postulantes"))
@@ -358,7 +358,8 @@ def puede_ver_auditoria() -> bool:
 def can_edit(section: str) -> bool:
     """True si el usuario puede editar la sección.
 
-    Secciones: 'adelantos' | 'descuentos' | 'seguimiento' | 'minutas'.
+    Secciones: 'adelantos' | 'descuentos' | 'seguimiento' | 'minutas' |
+    'postulantes'.
     Los permisos se administran desde la pestaña Usuarios (sólo el admin).
     Ser admin NO habilita editar datos: administrar y operar van separados.
     En Seguimiento este permiso además habilita ver las respuestas textuales

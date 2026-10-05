@@ -109,6 +109,33 @@ def test_el_admin_no_arrastra_el_acceso_a_postulantes():
     assert us.resumen_permisos({"es_admin": True, "ver_postulantes": False}) == "Administrador"
 
 
+def test_cargar_y_editar_postulantes_es_un_permiso_aparte_del_de_verlos():
+    assert "edit_postulantes" in us.CLAVES_PERMISO and "edit_postulantes" in us.COLUMNAS
+    solo_ve = us.resumen_permisos({"ver_postulantes": True})
+    edita = us.resumen_permisos({"ver_postulantes": True, "edit_postulantes": True})
+    assert solo_ve == "Postulantes"
+    assert edita == "Postulantes · Postulantes: cargar y editar"
+    # La descripción de «ver» ya no promete poder actualizar el registro.
+    descripcion = {c: d for c, _l, d in us.PERMISOS}["ver_postulantes"]
+    assert "Access" not in descripcion and "actualiz" not in descripcion.lower()
+
+
+def test_cargar_postulantes_implica_verlos():
+    """La pestaña se corta sin `ver_postulantes`: el de edición solo sería un
+    permiso que no se puede usar."""
+    marcas = {"edit_postulantes": True, "ver_postulantes": False, "edit_minutas": True}
+    guardado = us.con_dependencias(marcas)
+    assert guardado == {"edit_postulantes": True, "ver_postulantes": True, "edit_minutas": True}
+    assert marcas["ver_postulantes"] is False             # no toca el dict que recibe
+    # Al revés no: ver no da derecho a editar.
+    assert us.con_dependencias({"ver_postulantes": True}) == {"ver_postulantes": True}
+    assert us.con_dependencias({}) == {}
+
+
+def test_el_admin_tampoco_arrastra_la_edicion_de_postulantes():
+    assert us.resumen_permisos({"es_admin": True, "edit_postulantes": False}) == "Administrador"
+
+
 def test_si_un_admin_tiene_otro_permiso_el_resumen_lo_dice():
     """El resumen va a la auditoría: que un admin se haya dado acceso a los
     datos no puede quedar escondido detrás de un «Administrador» a secas."""

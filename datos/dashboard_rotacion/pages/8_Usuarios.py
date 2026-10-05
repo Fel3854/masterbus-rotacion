@@ -134,6 +134,8 @@ with tab_lista:
                         elif not nombre.strip():
                             st.error("El nombre visible no puede quedar vacío.")
                         else:
+                            # Lo que se audita tiene que ser lo que se guarda.
+                            marcas = us.con_dependencias(marcas)
                             try:
                                 if nombre.strip() != str(u["nombre"]):
                                     us.actualizar_nombre(usuario, nombre)
@@ -261,6 +263,7 @@ with tab_alta:
         if errores:
             st.error("\n\n".join(f"- {e}" for e in errores))
         else:
+            marcas_nuevas = us.con_dependencias(marcas_nuevas)
             try:
                 us.crear(nuevo_usuario, nuevo_nombre, nueva_pass,
                          marcas_nuevas, es_admin=nuevo_admin, creado_por=MI_NOMBRE)
