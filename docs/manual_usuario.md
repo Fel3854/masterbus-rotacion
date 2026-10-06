@@ -176,7 +176,7 @@ La búsqueda y los filtros se combinan, y valen tanto para la lista como para el
 
 ### La lista y la ficha
 
-Las entrevistas aparecen de la más nueva a la más vieja. La columna **Veces** marca con «×2», «×3» a quien tiene más de una entrevista.
+Las entrevistas aparecen de la más nueva a la más vieja. La lista muestra el **Motivo**; las **Observaciones** se leen en la ficha (la búsqueda las encuentra igual). Para ver quiénes se presentaron más de una vez usá el filtro *Se presentó más de una vez*; la ficha de esas personas lo indica arriba, al lado del nombre.
 
 **Hacé clic en una fila** para abrir la ficha: el texto completo de los motivos y las observaciones, y debajo las **otras entrevistas de esa misma persona** (mismo DNI). Dos avisos a tener en cuenta:
 

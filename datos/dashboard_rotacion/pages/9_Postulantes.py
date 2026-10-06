@@ -229,8 +229,14 @@ def _seccion(texto: str) -> None:
                 f'<span>{texto}</span></div>', unsafe_allow_html=True)
 
 
-def _tabla(f: pd.DataFrame, con_persona=True) -> pd.DataFrame:
-    """Las columnas que se muestran de una lista de entrevistas."""
+def _tabla(f: pd.DataFrame, con_persona=True, con_observaciones=True) -> pd.DataFrame:
+    """Las columnas que se muestran de una lista de entrevistas.
+
+    La lista principal va sin las observaciones: el texto completo está en la
+    ficha, y la búsqueda las sigue encontrando. Las tablas con las otras
+    entrevistas de una misma persona sí las llevan, porque ahí la pregunta es
+    qué pasó cada vez.
+    """
     vista = pd.DataFrame({"Nº": f["numero_orden"],
                           "Fecha": pd.to_datetime(f["fecha"], errors="coerce")})
     if con_persona:
@@ -244,10 +250,9 @@ def _tabla(f: pd.DataFrame, con_persona=True) -> pd.DataFrame:
     vista["Sector"] = f["sector"]
     vista["Apto"] = f["apto"].map({True: "✓", False: ""})
     vista["Motivo"] = f["motivo_rechazo"]
-    vista["Observaciones"] = f["observaciones"]
+    if con_observaciones:
+        vista["Observaciones"] = f["observaciones"]
     vista["Entrevistador"] = f["entrevistador_norm"]
-    if con_persona:
-        vista["Veces"] = f["veces"].map(lambda v: f"×{v}" if v > 1 else "")
     return vista
 
 
@@ -268,8 +273,6 @@ COLUMNAS_TABLA = {
         width="small", help="✓ = casilla tildada. Vacío = sin marcar, no rechazado."),
     "Motivo": st.column_config.TextColumn(width="medium"),
     "Observaciones": st.column_config.TextColumn(width="medium"),
-    "Veces": st.column_config.TextColumn(
-        width="small", help="Cuántas entrevistas tiene esa persona (mismo DNI)."),
 }
 
 
@@ -776,15 +779,15 @@ with tab_lista:
         # posición vieja apuntaría a otra persona. La key atada al recorte la
         # descarta sola.
         numeros = tuple(f["numero_orden"].tolist())
-        vista = _tabla(f)
+        vista = _tabla(f, con_observaciones=False)
         evento = st.dataframe(
             vista, hide_index=True, width="stretch", height=430,
             column_config=_config(vista),
             on_select="rerun", selection_mode="single-row",
             key=f"tabla_pt_{hash(numeros)}",
         )
-        st.caption("Hacé clic en una fila para ver la ficha completa y el historial "
-                   "de esa persona. " + LEYENDA_APTO)
+        st.caption("Hacé clic en una fila para ver la ficha completa, con las "
+                   "observaciones, y el historial de esa persona. " + LEYENDA_APTO)
 
         filas_sel = list((evento or {}).get("selection", {}).get("rows", []))
         if filas_sel and filas_sel[0] < len(f):
@@ -1231,10 +1234,7 @@ with tab_carga:
             else:
                 if n_nuevas:
                     with st.expander(f"Nuevas ({_miles(n_nuevas)})", expanded=n_nuevas <= 30):
-                        # «Veces» no va: se cuenta sobre todo el registro, y
-                        # acá sólo están las nuevas.
-                        vista_nuevas = _tabla(pt.enriquecer(plan["nuevas"])) \
-                            .drop(columns=["Veces"])
+                        vista_nuevas = _tabla(pt.enriquecer(plan["nuevas"]))
                         st.dataframe(vista_nuevas, hide_index=True, width="stretch",
                                      column_config=_config(vista_nuevas))
                 if n_modif:
