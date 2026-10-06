@@ -82,6 +82,13 @@ BEGIN
 END;
 $$;
 
+-- Nadie tiene por qué llamarla: sólo la dispara el trigger, y eso no pide este
+-- permiso (está probado que el UPDATE de la app sigue dejando su versión).
+-- Postgres ya rechaza llamar a mano una función de trigger; esto además saca
+-- el aviso del linter de Supabase por ser SECURITY DEFINER y ejecutable por
+-- el rol de la app.
+REVOKE ALL ON FUNCTION public.guardar_version_entrevista() FROM PUBLIC, anon, authenticated;
+
 -- Sólo cuando cambia un dato de la entrevista: un UPDATE que deja todo igual
 -- no agrega una versión idéntica a la anterior.
 DROP TRIGGER IF EXISTS guardar_version_entrevista ON entrevistas_postulantes;

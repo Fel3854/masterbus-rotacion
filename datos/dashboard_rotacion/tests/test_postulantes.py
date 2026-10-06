@@ -1624,6 +1624,9 @@ def test_la_app_no_puede_leer_ni_escribir_el_historial():
     assert "REVOKE ALL ON ENTREVISTAS_POSTULANTES_HISTORIAL FROM ANON, AUTHENTICATED" in sql
     assert "CREATE POLICY" not in sql
     assert "SECURITY DEFINER" in sql and "SET SEARCH_PATH = ''" in sql
+    # La función corre con permisos del dueño: que la app no la pueda invocar.
+    assert ("REVOKE ALL ON FUNCTION PUBLIC.GUARDAR_VERSION_ENTREVISTA() "
+            "FROM PUBLIC, ANON, AUTHENTICATED") in sql
 
 
 def test_el_historial_guarda_una_version_ante_cualquier_dato_que_cambie():
