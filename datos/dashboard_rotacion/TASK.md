@@ -166,7 +166,9 @@ Permisos (`usuarios.PERMISOS`):
   notas tienen datos delicados.
 - **`edit_postulantes`** habilita cargar, editar, anular e importar
   (`can_edit("postulantes")`). Implica ver: `usuarios.con_dependencias()` lo
-  guarda siempre junto con `ver_postulantes`.
+  guarda siempre junto con `ver_postulantes`. La migración no se lo da a nadie:
+  lo tilda el admin desde Usuarios, así queda en la auditoría. Hasta que lo haga,
+  quienes subían la base de Access tampoco pueden importar.
 
 Legajo (`preparar_empleados`, `apellido_compatible`, `cruzar_legajos`):
 
@@ -254,8 +256,10 @@ Tres cosas de la pantalla que no se ven leyendo una función suelta:
 
 **Orden de despliegue**: `migration_postulantes_edicion.sql` va ANTES que el
 código. `usuarios.buscar` y `leer_todo` piden las columnas por nombre: sin ellas
-no carga ni el login. La migración es aditiva, así que el código viejo sigue
-andando con ella aplicada.
+no carga ni el login. La migración es aditiva y no modifica filas, así que el
+código viejo sigue andando con ella aplicada. Después del código: el admin tilda
+el permiso, se sube la base de Access por última vez y recién ahí se carga la
+primera entrevista en el dashboard.
 
 ### Lecturas a Supabase: siempre paginadas
 

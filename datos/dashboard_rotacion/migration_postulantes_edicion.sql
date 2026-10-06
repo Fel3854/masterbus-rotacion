@@ -6,9 +6,10 @@
 -- copia de consulta. Desde esta migración el dashboard ES el registro: las
 -- entrevistas se cargan, se corrigen y se anulan acá, y Access deja de usarse.
 --
--- Es aditiva: no cambia ni borra nada de lo que ya está, así que se puede
--- aplicar antes de publicar el código nuevo. Al revés no: el código nuevo pide
--- estas columnas por nombre y sin ellas no carga ni el login.
+-- Es aditiva y no modifica ninguna fila: sólo agrega columnas, una tabla y un
+-- trigger. Por eso se puede aplicar antes de publicar el código nuevo. Al revés
+-- no: el código nuevo pide estas columnas por nombre y sin ellas no carga ni el
+-- login.
 
 -- ── 1. Rastro de lo que se cargó o editó a mano, y anulación ──
 -- `editado_por` y `fecha_edicion` se sellan sólo cuando alguien carga o edita
@@ -23,23 +24,14 @@ ALTER TABLE entrevistas_postulantes
     ADD COLUMN IF NOT EXISTS anulada       BOOLEAN NOT NULL DEFAULT FALSE;
 
 -- ── 2. Permiso de carga y edición ──
--- `ver_postulantes` pasa a ser sólo de lectura. Quien hoy lo tiene ya podía
--- actualizar el registro desde Access, así que arranca con el permiso nuevo:
--- nadie pierde ni gana nada el día del cambio. Va adentro del IF para que
--- volver a correr la migración no le devuelva el permiso a quien el admin se
--- lo haya sacado después.
-DO $$
-BEGIN
-    IF NOT EXISTS (
-        SELECT 1 FROM information_schema.columns
-        WHERE table_schema = 'public' AND table_name = 'usuarios'
-          AND column_name = 'edit_postulantes'
-    ) THEN
-        ALTER TABLE public.usuarios
-            ADD COLUMN edit_postulantes BOOLEAN NOT NULL DEFAULT FALSE;
-        UPDATE public.usuarios SET edit_postulantes = TRUE WHERE ver_postulantes;
-    END IF;
-END $$;
+-- `ver_postulantes` pasa a ser sólo de lectura; cargar, editar, anular e
+-- importar piden este permiso nuevo. Arranca en FALSE para todos, también para
+-- quienes hasta acá actualizaban el registro desde Access: la migración no se
+-- lo da a nadie. Lo tilda el administrador desde la pestaña Usuarios, que es
+-- por donde se dan todos los permisos y donde queda anotado en la Auditoría
+-- quién se lo dio a quién.
+ALTER TABLE usuarios
+    ADD COLUMN IF NOT EXISTS edit_postulantes BOOLEAN NOT NULL DEFAULT FALSE;
 
 -- ── 3. Historial: la versión anterior de cada entrevista modificada ──
 -- Sin Access, esta base es la única copia de un registro que arranca en 2007.

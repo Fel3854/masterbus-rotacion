@@ -1606,7 +1606,7 @@ def test_la_migracion_de_edicion_agrega_las_columnas_que_usa_el_modulo():
     for columna in ("editado_por", "fecha_edicion", "anulada"):
         assert f"ADD COLUMN IF NOT EXISTS {columna.upper()}" in sql
         assert columna in pt.COLUMNAS_DB
-    assert "ADD COLUMN EDIT_POSTULANTES BOOLEAN NOT NULL DEFAULT FALSE" in sql
+    assert "ADD COLUMN IF NOT EXISTS EDIT_POSTULANTES BOOLEAN NOT NULL DEFAULT FALSE" in sql
 
 
 def test_la_migracion_de_edicion_tampoco_habilita_borrar():
@@ -1638,14 +1638,16 @@ def test_el_historial_guarda_una_version_ante_cualquier_dato_que_cambie():
         assert f"NEW.{campo.upper()}" in despues, campo
 
 
-def test_el_permiso_de_edicion_no_se_vuelve_a_regalar_si_se_repite_la_migracion():
-    """El UPDATE que da el permiso a quienes ya veían la pestaña va adentro del
-    IF que crea la columna: correrla dos veces no deshace lo que hizo el admin."""
+def test_la_migracion_de_edicion_no_le_da_el_permiso_a_nadie_ni_modifica_filas():
+    """El permiso de carga lo da el administrador desde la pestaña Usuarios,
+    donde queda en la Auditoría. La migración sólo agrega estructura: el único
+    UPDATE que nombra es el del trigger, y el único INSERT, el que hace el
+    trigger en el historial."""
     sql = _ddl_edicion()
-    bloque = sql.split("DO $$", 1)[1].split("END $$", 1)[0]
-    assert "IF NOT EXISTS" in bloque and "COLUMN_NAME = 'EDIT_POSTULANTES'" in bloque
-    assert "UPDATE PUBLIC.USUARIOS SET EDIT_POSTULANTES = TRUE WHERE VER_POSTULANTES" in bloque
-    assert sql.count("SET EDIT_POSTULANTES = TRUE") == 1
+    assert "SET EDIT_POSTULANTES" not in sql
+    assert "UPDATE " not in sql.replace("BEFORE UPDATE ON", "")
+    assert sql.count("INSERT INTO") == 1
+    assert "INSERT INTO PUBLIC.ENTREVISTAS_POSTULANTES_HISTORIAL" in sql
 
 
 # ─── Archivo real (sólo en la máquina de quien lo tenga) ─────

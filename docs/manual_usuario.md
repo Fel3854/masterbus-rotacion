@@ -265,7 +265,7 @@ Para tener en cuenta:
 - Si al archivo le faltan entrevistas o cambia demasiadas de golpe, aparece un aviso y hay que tildar una confirmación para seguir. Ante la duda, no confirmes.
 - **Si el `.mdb` no se puede leer**, exportá la tabla a Excel y subí ese archivo: en Access, clic derecho sobre la tabla *FORM 045 02 REGISTRO DE ENTREVISTAS A POSTULANTES* → **Exportar** → **Excel**, sin cambiar los nombres de las columnas.
 
-**El pase desde Access se hace una sola vez.** Antes de cargar la primera entrevista en el dashboard hay que subir la base de Access por última vez, y desde ahí no cargar más en Access. Si alguien carga después una entrevista en Access, le va a tocar un Nº de orden que el dashboard ya usó para otra persona: al importar, esa entrevista aparece en *Editadas acá* y no entra. Hay que cargarla a mano desde *Nueva entrevista*.
+**El pase desde Access se hace una sola vez.** Primero el administrador le tilda *Postulantes: cargar y editar* a quien vaya a cargar: el permiso arranca destildado para todos, también para quienes antes subían la base de Access. Después, antes de cargar la primera entrevista en el dashboard, hay que subir la base de Access por última vez, y desde ahí no cargar más en Access. Si alguien carga después una entrevista en Access, le va a tocar un Nº de orden que el dashboard ya usó para otra persona: al importar, esa entrevista aparece en *Editadas acá* y no entra. Hay que cargarla a mano desde *Nueva entrevista*.
 
 ---
 
