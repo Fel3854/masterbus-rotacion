@@ -55,6 +55,21 @@ Se abre en el navegador en `http://localhost:8501`
 
 > Streamlit Cloud detecta automáticamente el `requirements.txt` en la misma carpeta.
 
+### Después de cada push: reiniciar la app
+
+Un push a `main` actualiza los archivos en Streamlit Cloud, pero **no reinicia el
+proceso**. Las páginas (`pages/*.py`) se vuelven a leer del disco, y los módulos
+que ya estaban importados (`usuarios.py`, `utils.py`, `postulantes.py`, `auth.py`…)
+pueden quedar en memoria con la versión vieja: Streamlit sólo los recarga si
+alguien tenía la app abierta en el momento del cambio.
+
+El resultado es una app a medias, con páginas nuevas llamando a módulos viejos.
+Pasó el 2026-10-05: Usuarios daba `AttributeError` en `us.con_dependencias` y
+mostraba un solo permiso de Postulantes en lugar de dos.
+
+Si el push tocó algún `.py` que no es una página: **Manage app** (abajo a la
+derecha, entrando como dueño de la app) → **⋮** → **Reboot app**.
+
 ## Funcionalidades del dashboard
 
 | Función | Descripción |
