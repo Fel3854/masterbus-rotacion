@@ -699,10 +699,10 @@ def _eliminar_general(record_id: str, detalle: str = "") -> None:
 
 
 def _auditar_apertura_general(fila) -> None:
-    """Como `_auditar_apertura`: se llama al ABRIR la entrevista, no al dibujarla,
-    y sólo cuenta como lectura sensible si el usuario ve el texto libre."""
-    if not PUEDE_EDITAR:
-        return
+    """Como `_auditar_apertura`: se llama al ABRIR la entrevista, no al dibujarla.
+
+    Acá toda apertura es una lectura sensible: sólo llega a la entrevista quien
+    tiene permiso de carga, y la ve entera."""
     auditoria.registrar(
         "seguimiento", "lectura",
         f"Abrió la entrevista de personal ingresante de {fila.get('apenom')} "
@@ -720,12 +720,10 @@ def _gen_enunciado(p) -> str:
 
 
 def _gen_tab_form(df_emp, df_gen) -> None:
-    """Pestaña «Nueva entrevista» del personal no conductor."""
-    if not PUEDE_EDITAR:
-        st.markdown('<p class="section-label">Nueva entrevista</p>', unsafe_allow_html=True)
-        st.caption("Modo solo lectura — no tenés permiso para registrar entrevistas.")
-        return
+    """Pestaña «Nueva entrevista» del personal no conductor.
 
+    Como el listado y el detalle, sólo se dibuja para quien tiene permiso de
+    carga: el corte está en `_vista_general`."""
     st.markdown('<p class="section-label">Registrar entrevista</p>', unsafe_allow_html=True)
     if st.session_state.pop("saved_ok_sgg", False):
         st.success(st.session_state.pop("saved_msg_sgg", "✓ Entrevista registrada."))
@@ -974,7 +972,7 @@ def _gen_detalle(fila) -> None:
     secciones = [
         (titulo, [dict(it, respuesta=_esc(it["respuesta"]), textual=_esc(it["textual"]),
                        observacion=_esc(it["observacion"])) for it in items])
-        for titulo, items in sgen.detalle_entrevista(fila, incluir_textos=PUEDE_EDITAR)
+        for titulo, items in sgen.detalle_entrevista(fila, incluir_textos=True)
     ]
     corte = len(sgen.SECCIONES)     # 1-7: lo que dijo el ingresante · 8-9: el cierre
     col_izq, col_der = st.columns([3, 2], gap="large")
@@ -982,10 +980,6 @@ def _gen_detalle(fila) -> None:
         st.markdown(_bloques_html(secciones[:corte]), unsafe_allow_html=True)
     with col_der:
         st.markdown(_bloques_html(secciones[corte:]), unsafe_allow_html=True)
-        if not PUEDE_EDITAR:
-            st.caption(
-                "Las respuestas abiertas y las observaciones son confidenciales: "
-                "solo las ve quien tiene permiso de carga en esta sección.")
 
 
 def _gen_tab_listado(df_gen, filtrar, rojas_ocultas) -> None:
@@ -1027,7 +1021,7 @@ def _gen_tab_listado(df_gen, filtrar, rojas_ocultas) -> None:
         with c_desc:
             if st.download_button(
                 "⬇  Descargar esta entrevista (Excel)",
-                data=sgen.exportar_excel(fila.to_frame().T, incluir_textos=PUEDE_EDITAR),
+                data=sgen.exportar_excel(fila.to_frame().T, incluir_textos=True),
                 file_name=(f"entrevista_ingresante_{fila['legajo']}_"
                            f"{fila['fecha_entrevista'].strftime('%d-%m-%Y')}.xlsx"),
                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
@@ -1036,8 +1030,7 @@ def _gen_tab_listado(df_gen, filtrar, rojas_ocultas) -> None:
                 auditoria.registrar(
                     "seguimiento", "export",
                     f"Descargó la entrevista de personal ingresante de {fila['apenom']} "
-                    f"(leg. {fila['legajo']})"
-                    + (" — con observaciones" if PUEDE_EDITAR else " — sin observaciones"),
+                    f"(leg. {fila['legajo']}) — con observaciones",
                     registro_id=fila["id"],
                 )
         _gen_detalle(fila)
@@ -1093,7 +1086,7 @@ def _gen_tab_listado(df_gen, filtrar, rojas_ocultas) -> None:
             def _fila_alerta(a):
                 clase = "alert-row" if a["nivel_alerta"] == "Roja" else "alert-row amber"
                 quote = ""
-                if PUEDE_EDITAR and _txt(a.get(sgen.OBS_FINALES)):
+                if _txt(a.get(sgen.OBS_FINALES)):
                     quote = f'<div class="alert-quote">{_esc(a.get(sgen.OBS_FINALES))}</div>'
                 lugar = " · ".join(x for x in (_esc(a.get("cargo")), _esc(a.get("sector"))) if x)
                 c_txt, c_btn = st.columns([9, 2], vertical_alignment="center")
@@ -1128,11 +1121,6 @@ def _gen_tab_listado(df_gen, filtrar, rojas_ocultas) -> None:
                 with st.expander(f"Atención ({len(atencion_f)}) — revisar cuando puedas"):
                     for _, a in atencion_f.iterrows():
                         _fila_alerta(a)
-            if not PUEDE_EDITAR:
-                st.caption(
-                    "Las observaciones son confidenciales y solo las ve quien tiene "
-                    "permiso de carga en esta sección.")
-
         st.divider()
         st.markdown('<p class="section-label">Entrevistas del período</p>',
                     unsafe_allow_html=True)
@@ -1163,7 +1151,7 @@ def _gen_tab_listado(df_gen, filtrar, rojas_ocultas) -> None:
 
         if st.download_button(
             "⬇  Descargar entrevistas (Excel)",
-            data=sgen.exportar_excel(f, incluir_textos=PUEDE_EDITAR),
+            data=sgen.exportar_excel(f, incluir_textos=True),
             file_name=(f"seguimiento_personal_{desde.strftime('%d-%m-%Y')}"
                        f"_a_{hasta.strftime('%d-%m-%Y')}.xlsx"),
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
@@ -1173,13 +1161,11 @@ def _gen_tab_listado(df_gen, filtrar, rojas_ocultas) -> None:
                 "seguimiento", "export",
                 f"Descargó {len(f)} entrevista(s) de personal ingresante del "
                 f"{desde.strftime('%d/%m/%Y')} al {hasta.strftime('%d/%m/%Y')}"
-                + (" — con observaciones" if PUEDE_EDITAR else " — sin observaciones"),
+                " — con observaciones",
                 datos={"registros": int(len(f)), "cuestionario": "general"},
             )
 
     # ── Eliminar ──
-    if not PUEDE_EDITAR:
-        return
     st.divider()
     if st.session_state.pop("deleted_ok_sgg", False):
         st.success("Entrevista eliminada correctamente.")
@@ -1427,6 +1413,24 @@ def _vista_general(df_emp) -> None:
         if st.button("Reintentar", key="retry_db_sgg"):
             _leer_general.clear()
             st.rerun()
+        return
+
+    # Sin permiso de carga no se ve a nadie en particular: ni el listado, ni las
+    # alertas, ni el detalle, ni el Excel. A diferencia de conductores, acá cada
+    # entrevista trae el resultado («no recomendar continuidad») y la evaluación
+    # que el sector hizo de la persona. Quedan los agregados, y recién cuando hay
+    # entrevistas suficientes como para que un promedio no sea una sola persona.
+    if not PUEDE_EDITAR:
+        st.info(
+            "**Modo solo lectura.** Ves los indicadores del conjunto, sin nombres. "
+            "Las entrevistas de cada persona las ve solo quien tiene el permiso de "
+            "Seguimiento.")
+        if len(df_gen) < sgen.MIN_N_CORTE:
+            st.caption(
+                f"Los indicadores se muestran a partir de {sgen.MIN_N_CORTE} entrevistas "
+                "cargadas: con menos, un promedio deja ver lo que respondió una persona.")
+        else:
+            _gen_tab_indicadores(df_gen)
         return
 
     # Los defaults de los filtros viven en session_state por lo mismo que en

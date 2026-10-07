@@ -155,7 +155,9 @@ Todo lo de esta pestaña es agregado: **no aparecen nombres**.
 
 Digitaliza la **Encuesta de seguimiento – personal ingresante**: la que se le toma, antes de la efectivización, a todo ingresante que no es conductor (taller, lavadero, administración, etc.).
 
-Tiene las mismas tres pestañas y los mismos permisos que el de conductores: carga quien tiene el permiso de *Seguimiento*; el resto ve los puntajes, el resultado y los indicadores, pero **no** las observaciones ni las respuestas abiertas.
+Tiene las mismas tres pestañas que el de conductores, pero es más reservado: **las entrevistas de cada persona las ve solo quien tiene el permiso de *Seguimiento***. Cada entrevista trae el resultado (por ejemplo, *No recomendar continuidad*) y la evaluación que el sector hizo de esa persona, así que el listado, las alertas, el detalle y el Excel quedan para quien carga.
+
+Quien no tiene el permiso ve únicamente los **indicadores del conjunto, sin nombres**, y recién cuando hay 5 o más entrevistas cargadas: con menos, un promedio deja ver lo que respondió una persona.
 
 #### Pestaña 1: Nueva entrevista
 
@@ -186,13 +188,13 @@ Y queda en **atención** cuando:
 
 *Recomendar continuidad con seguimiento* no es una alerta: se ve en la columna Resultado y se puede filtrar.
 
-Debajo está la tabla de entrevistas del período, con filtros por fecha, sector y resultado, y el botón para **descargar todo a Excel**. Si no tenés permiso de carga, el Excel sale sin las observaciones ni las respuestas abiertas. Haciendo clic en una fila se abre la entrevista completa.
+Debajo está la tabla de entrevistas del período, con filtros por fecha, sector y resultado, y el botón para **descargar todo a Excel**, que sale completo, con las observaciones y las respuestas abiertas. Haciendo clic en una fila se abre la entrevista completa.
 
-Al final, quien tiene permiso puede **eliminar** una entrevista cargada por error (pide confirmación).
+Al final se puede **eliminar** una entrevista cargada por error (pide confirmación).
 
 #### Pestaña 3: Indicadores
 
-Todo lo de esta pestaña es agregado: **no aparecen nombres**.
+Todo lo de esta pestaña es agregado: **no aparecen nombres**. Es lo único que ve quien no tiene el permiso de *Seguimiento*.
 
 **Cómo leer los índices**: van de 0 a 100 y cada respuesta vale según lo que dice.
 
@@ -386,7 +388,7 @@ La pestaña **Usuarios** es del administrador. Desde ahí se da de alta a alguie
 Hay una regla general y tres excepciones:
 
 - **Todos ven todas las secciones.** Los permisos sólo habilitan *cargar, editar y eliminar*.
-- **Excepción 1:** el permiso de *Seguimiento* además habilita ver las respuestas textuales de las entrevistas, que son confidenciales. Dárselo a alguien es dejarlo leer lo que el conductor dijo bajo promesa de confidencialidad, y las observaciones de las entrevistas del resto del personal.
+- **Excepción 1:** el permiso de *Seguimiento* además habilita ver las respuestas textuales de las entrevistas, que son confidenciales. Dárselo a alguien es dejarlo leer lo que el conductor dijo bajo promesa de confidencialidad. En el cuestionario del resto del personal habilita además ver las entrevistas de cada persona, con su resultado y la evaluación del sector: sin este permiso, de ese cuestionario solo se ven los indicadores del conjunto.
 - **Excepción 2:** *Administrador* es un permiso de lectura. Habilita Auditoría y Usuarios, y **no** habilita cargar datos: administrar y operar se mantienen separados a propósito.
 - **Excepción 3:** *Postulantes* es el otro permiso de lectura. Sin él, la pestaña Postulantes ni aparece. Sólo deja ver, buscar y descargar: para cargar, editar, anular o importar hace falta además *Postulantes: cargar y editar*, que incluye el de ver (si tildás sólo ése, se guarda con los dos). Ser administrador **no** incluye ninguno: si un admin lo necesita, se lo tilda como a cualquier otro usuario, y ese cambio queda en la Auditoría.
 

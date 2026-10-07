@@ -52,7 +52,9 @@ PERMISOS = [
     ("edit_descuentos",  "Descuentos",
      "Registrar y eliminar descuentos"),
     ("edit_seguimiento", "Seguimiento",
-     "Cargar entrevistas y ver las respuestas textuales (confidenciales)"),
+     "Cargar entrevistas y ver las respuestas textuales (confidenciales). Del "
+     "resto del personal, además ver las entrevistas de cada persona: sin este "
+     "permiso de ese cuestionario sólo se ven los indicadores"),
     ("edit_minutas",     "Minutas",
      "Crear, editar y eliminar minutas"),
     # El único del catálogo que no es de edición: sin él la pestaña ni aparece.
