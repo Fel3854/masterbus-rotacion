@@ -1,5 +1,12 @@
-"""Vista: Seguimiento de Conductores (2° mes) — Grupo Master"""
+"""Vista: Seguimiento del personal ingresante — Grupo Master
 
+Dos cuestionarios, que se eligen arriba de todo:
+  · Conductores       → entrevista del 2° mes (`seguimiento.py`).
+  · Resto del personal → encuesta de efectivización (`seguimiento_general.py`).
+Cada uno tiene su tabla, su formulario y sus indicadores; no comparten estado.
+"""
+
+import html
 import os
 import sys
 from datetime import date
@@ -16,6 +23,7 @@ from utils import (cargar_datos, cargar_empleados_activos, chart_base,  # noqa: 
 from auth import can_edit, current_user  # noqa: E402
 import auditoria
 import seguimiento as sg  # noqa: E402
+import seguimiento_general as sgen  # noqa: E402
 
 # ─── CSS ─────────────────────────────────────────────────────
 st.markdown(f"""
@@ -259,6 +267,8 @@ div[data-testid="stRadio"] label:has(input:checked) p {{ color: #fff !important;
     font-family: 'Fira Code', monospace; font-weight: 600;
     color: {COLOR_PRIMARY}; margin-right: 6px;
 }}
+/* Aclaración entre paréntesis que trae el papel al lado de la pregunta. */
+.preg .ayuda {{ color: #888 !important; font-weight: 400; }}
 /* Pregunta que quedó sin responder en el último intento de guardar.
    El borde y el fondo son para encontrarla scrolleando; la etiqueta es para
    que se entienda sin depender del color. */
@@ -441,7 +451,9 @@ def _preg_html(num, texto, falta=False):
     """
     clase = "preg falta" if falta else "preg"
     tag = '<span class="falta-tag">Falta</span>' if falta else ""
-    return f'<div class="{clase}"><span class="num">{num}.</span>{texto}{tag}</div>'
+    # Sin número cuando el enunciado no es una pregunta numerada del papel.
+    numero = f'<span class="num">{num}.</span>' if num not in (None, "") else ""
+    return f'<div class="{clase}">{numero}{texto}{tag}</div>'
 
 
 # cod → (número o letra, enunciado), para repintar sin volver a recorrer el catálogo.
@@ -615,6 +627,882 @@ def _guardia_salida() -> None:
     )
 
 
+# ══════════════════════════════════════════════════════════════
+# Cuestionario «Resto del personal» (no conductores)
+# ══════════════════════════════════════════════════════════════
+# Las mismas tres pestañas que conductores, con su propio catálogo
+# (seguimiento_general.py) y su propia tabla. No comparte estado con el de
+# conductores: todas sus keys de session_state llevan `sgg`.
+CUEST_CONDUCTORES = "Conductores"
+CUEST_GENERAL = "Resto del personal"
+SUBTITULOS = {
+    CUEST_CONDUCTORES: "Entrevista de seguimiento del 2° mes: registrá las respuestas "
+                       "y medí la adaptación de cada conductor nuevo.",
+    CUEST_GENERAL: "Encuesta de seguimiento del personal ingresante, previa a la "
+                   "efectivización: registrá las respuestas, la evaluación del sector "
+                   "y el resultado.",
+}
+FILTROS_GENERAL = ("desde_sgg", "hasta_sgg", "sector_sgg", "resultado_sgg")
+
+
+def _txt(valor) -> str:
+    """Un valor del padrón o de la base como texto; '' si viene vacío o NaN."""
+    if valor is None or (not isinstance(valor, str) and pd.isna(valor)):
+        return ""
+    return str(valor).strip()
+
+
+def _esc(valor) -> str:
+    """Texto que cargó una persona, listo para ir dentro de un HTML."""
+    return html.escape(_txt(valor))
+
+
+def _fecha_txt(valor) -> str:
+    return valor.strftime("%d/%m/%Y") if pd.notna(valor) else "—"
+
+
+@st.cache_data(ttl=300, show_spinner=False)
+def _leer_general() -> pd.DataFrame:
+    """Todas las entrevistas del personal no conductor (mismo criterio que `_leer`)."""
+    datos = leer_paginado(lambda: (
+        get_supabase().table(sgen.TABLA)
+        .select(",".join(sgen.columnas_db()), count="exact")
+        .order("fecha_entrevista", desc=True)
+        .order("id")              # desempate: la paginación necesita un orden único
+    ))
+    if not datos:
+        return pd.DataFrame(columns=sgen.columnas_db())
+    df = pd.DataFrame(datos)
+    for col in ("fecha_entrevista", "fecha_ingreso"):
+        if col in df.columns:
+            df[col] = pd.to_datetime(df[col], errors="coerce").dt.date
+    return df
+
+
+def _guardar_general(payload: dict) -> None:
+    get_supabase().table(sgen.TABLA).insert(payload).execute()
+    # Sólo la cabecera, igual que en conductores: ni las respuestas ni el
+    # resultado de la entrevista van al log.
+    auditoria.registrar(
+        "seguimiento", "alta",
+        f"{payload.get('apenom')} (leg. {payload.get('legajo')}) · "
+        f"entrevista de personal ingresante del {payload.get('fecha_entrevista')}",
+        datos={"legajo": payload.get("legajo"), "sector": payload.get("sector"),
+               "cuestionario": "general"},
+    )
+
+
+def _eliminar_general(record_id: str, detalle: str = "") -> None:
+    get_supabase().table(sgen.TABLA).delete().eq("id", record_id).execute()
+    auditoria.registrar("seguimiento", "baja",
+                        f"{detalle} (personal ingresante)", registro_id=record_id)
+
+
+def _auditar_apertura_general(fila) -> None:
+    """Como `_auditar_apertura`: se llama al ABRIR la entrevista, no al dibujarla,
+    y sólo cuenta como lectura sensible si el usuario ve el texto libre."""
+    if not PUEDE_EDITAR:
+        return
+    auditoria.registrar(
+        "seguimiento", "lectura",
+        f"Abrió la entrevista de personal ingresante de {fila.get('apenom')} "
+        f"(leg. {fila.get('legajo')}) del {_fecha_txt(fila.get('fecha_entrevista'))} "
+        "— incluye observaciones",
+        registro_id=fila.get("id"),
+    )
+
+
+def _gen_enunciado(p) -> str:
+    """Enunciado de una pregunta, con la aclaración entre paréntesis del papel."""
+    if p.get("ayuda"):
+        return f'{p["texto"]} <span class="ayuda">({p["ayuda"]})</span>'
+    return p["texto"]
+
+
+def _gen_tab_form(df_emp, df_gen) -> None:
+    """Pestaña «Nueva entrevista» del personal no conductor."""
+    if not PUEDE_EDITAR:
+        st.markdown('<p class="section-label">Nueva entrevista</p>', unsafe_allow_html=True)
+        st.caption("Modo solo lectura — no tenés permiso para registrar entrevistas.")
+        return
+
+    st.markdown('<p class="section-label">Registrar entrevista</p>', unsafe_allow_html=True)
+    if st.session_state.pop("saved_ok_sgg", False):
+        st.success(st.session_state.pop("saved_msg_sgg", "✓ Entrevista registrada."))
+
+    opciones_map = {}
+    for _, r in sgen.solo_no_conductores(df_emp).iterrows():
+        partes = (f"{r['legajo']} — {r['apenom']}", _txt(r.get("cargo")),
+                  _txt(r.get("empleador")))
+        opciones_map["  ·  ".join(x for x in partes if x)] = r
+    # El sector no viene en el padrón: se ofrece lo ya cargado para que el mismo
+    # sector no termine escrito de tres maneras.
+    sectores = sorted({_txt(s) for s in df_gen["sector"] if _txt(s)})
+
+    # Mismo esquema que conductores: el seed se bumpea SOLO tras guardar con
+    # éxito, y nunca clear_on_submit (borraría todo si falla una validación).
+    seed = st.session_state.setdefault("sgg_form_seed", 0)
+    nombre_user = (current_user() or {}).get("nombre", "")
+    cod_res = sgen.RESULTADO["cod"]
+
+    respuestas, obs = {}, {}
+    slots, enunciados = {}, {}     # cod → hueco y (número, texto), para repintar al validar
+
+    def _enunciado(cod, num, texto):
+        enunciados[cod] = (num, texto)
+        slots[cod] = st.empty()
+        slots[cod].markdown(_preg_html(num, texto), unsafe_allow_html=True)
+
+    with st.form("form_seguimiento_general", clear_on_submit=False):
+        empleado_sel = st.selectbox(
+            "Empleado", options=list(opciones_map), index=None,
+            placeholder="Escribí nombre, apellido o legajo para buscar...",
+            key=f"sgg_emp_{seed}",
+        )
+        st.caption("Aparece el personal activo que no es conductor. El puesto y la "
+                   "fecha de ingreso se toman del padrón al guardar.")
+        c1, c2, c3 = st.columns(3)
+        with c1:
+            sector = st.selectbox(
+                "Sector", options=sectores, index=None, accept_new_options=True,
+                placeholder="Elegí o escribí uno nuevo", key=f"sgg_sector_{seed}")
+        with c2:
+            fecha_entrevista = st.date_input(
+                "Fecha de la entrevista", value=date.today(), key=f"sgg_fecha_{seed}")
+        with c3:
+            entrevistador = st.text_input(
+                "Entrevistador", value=nombre_user, key=f"sgg_entrev_{seed}")
+
+        for num_sec, nombre_sec in sgen.SECCIONES.items():
+            _sec_head(f"{num_sec}. {nombre_sec}")
+            for p in [q for q in sgen.PREGUNTAS if q["seccion"] == num_sec]:
+                _enunciado(p["cod"], p["n"], _gen_enunciado(p))
+                if p["tipo"] == "abierta":
+                    respuestas[p["cod"]] = st.text_area(
+                        p["texto"], max_chars=1000, height=80,
+                        label_visibility="collapsed", placeholder="Opcional",
+                        key=f"sgg_{p['cod']}_{seed}")
+                    continue
+                respuestas[p["cod"]] = st.radio(
+                    p["texto"], options=list(p["opciones"]), index=None,
+                    horizontal=True, label_visibility="collapsed",
+                    key=f"sgg_{p['cod']}_{seed}",
+                )
+                if "texto_label" in p:
+                    respuestas[p["cod"] + "_texto"] = st.text_input(
+                        p["texto_label"], key=f"sgg_{p['cod']}_txt_{seed}",
+                        placeholder="Detallar solo si corresponde")
+            # En el papel las observaciones son una por sección, no por pregunta.
+            obs[sgen.OBS_SECCION[num_sec]] = st.text_area(
+                "Observaciones", max_chars=1000, height=70, placeholder="Opcional",
+                key=f"sgg_obs_{num_sec}_{seed}")
+
+        _sec_head(f"{sgen.N_SECCION_EVALUACION}. {sgen.TITULO_EVALUACION}")
+        st.caption("La completa el sector: cómo evalúa al ingresante.")
+        for e in sgen.EVALUACION:
+            _enunciado(e["cod"], e["letra"], e["texto"])
+            respuestas[e["cod"]] = st.radio(
+                e["texto"], options=list(e["opciones"]), index=None,
+                horizontal=True, label_visibility="collapsed",
+                key=f"sgg_{e['cod']}_{seed}",
+            )
+        obs[sgen.OBS_EVALUACION] = st.text_area(
+            "Observaciones", max_chars=1000, height=70, placeholder="Opcional",
+            key=f"sgg_obs_eval_{seed}")
+
+        _sec_head(f"{sgen.N_SECCION_RESULTADO}. {sgen.TITULO_RESULTADO}")
+        _enunciado(cod_res, None, "Elegí una sola opción.")
+        respuestas[cod_res] = st.radio(
+            sgen.TITULO_RESULTADO, options=list(sgen.RESULTADOS), index=None,
+            horizontal=True, label_visibility="collapsed", key=f"sgg_resultado_{seed}",
+        )
+        obs[sgen.OBS_FINALES] = st.text_area(
+            "Observaciones finales", max_chars=2000, height=110, placeholder="Opcional",
+            key=f"sgg_obs_fin_{seed}")
+
+        # El mismo marcador que usa conductores: ancla la guarda de salida a
+        # este formulario (se dibuja uno solo de los dos por vez).
+        st.markdown('<span id="sg-guard-marker"></span>', unsafe_allow_html=True)
+        st.caption("No cierres la pestaña ni cambies de cuestionario hasta guardar "
+                   "la entrevista.")
+        submitted = st.form_submit_button("Registrar entrevista")
+
+    _guardia_salida()
+    if not submitted:
+        return
+
+    # ── Validación (fuera del form, como el resto del dashboard) ──
+    faltan_cab, faltan_preg, faltan_eval, faltan_txt = [], [], [], []
+    marcar = []     # cods a repintar en rojo arriba
+    if not empleado_sel:
+        faltan_cab.append("el empleado")
+    if not sgen.normalizar_sector(sector):
+        faltan_cab.append("el sector")
+    if not (entrevistador or "").strip():
+        faltan_cab.append("el entrevistador")
+    if not fecha_entrevista:
+        faltan_cab.append("la fecha de la entrevista")
+
+    for p in sgen.CERRADAS:
+        elegido = respuestas.get(p["cod"])
+        if elegido is None:
+            faltan_preg.append(str(p["n"]))
+            marcar.append(p["cod"])
+        elif elegido in p.get("texto_si", ()) and \
+                not (respuestas.get(p["cod"] + "_texto") or "").strip():
+            faltan_txt.append(str(p["n"]))
+            marcar.append(p["cod"])
+    for e in sgen.EVALUACION:
+        if respuestas.get(e["cod"]) is None:
+            faltan_eval.append(e["corto"])
+            marcar.append(e["cod"])
+    falta_resultado = respuestas.get(cod_res) is None
+    if falta_resultado:
+        marcar.append(cod_res)
+
+    # Un solo error con todo lo que falta, y los enunciados repintados en rojo.
+    if faltan_cab or faltan_preg or faltan_eval or faltan_txt or falta_resultado:
+        for cod in marcar:
+            num, texto = enunciados[cod]
+            slots[cod].markdown(_preg_html(num, texto, falta=True), unsafe_allow_html=True)
+
+        partes = []
+        if faltan_cab:
+            partes.append("Falta completar " + ", ".join(faltan_cab) + ".")
+        if faltan_preg:
+            partes.append(
+                f"Faltan {len(faltan_preg)} respuesta"
+                f"{'s' if len(faltan_preg) != 1 else ''} — "
+                "quedaron marcadas en rojo más arriba: preguntas "
+                + ", ".join(faltan_preg) + ".")
+        if faltan_eval:
+            partes.append("Falta la evaluación del sector en: " + ", ".join(faltan_eval) + ".")
+        if falta_resultado:
+            partes.append("Falta elegir el resultado de la entrevista.")
+        if faltan_txt:
+            partes.append(
+                f"Respondiste «Sí» en {' y '.join(faltan_txt)}: falta completar el detalle.")
+        st.error(" ".join(partes))
+        return
+
+    r = opciones_map.get(empleado_sel)
+    if r is None:
+        st.error("No se encontró al empleado. Intentá de nuevo.")
+        return
+
+    payload = {
+        "legajo": str(r["legajo"]).strip(),
+        "apenom": r["apenom"],
+        "empleador": r["empleador"],
+        "base": _txt(r.get("str")) or None,
+        "cargo": _txt(r.get("cargo")) or None,
+        "sector": sgen.normalizar_sector(sector),
+        "fecha_ingreso": r["fecha_inicio"].isoformat()
+                         if pd.notna(r.get("fecha_inicio")) else None,
+        "fecha_entrevista": fecha_entrevista.isoformat(),
+        "entrevistador": entrevistador.strip(),
+        "registrado_por": nombre_user,
+    }
+    # Se guarda el CÓDIGO, nunca la etiqueta del radio (salvo en las categorías).
+    for p in sgen.PREGUNTAS:
+        payload[p["cod"]] = sgen.codigo(p, respuestas.get(p["cod"]))
+        if "texto_label" in p:
+            payload[p["cod"] + "_texto"] = \
+                (respuestas.get(p["cod"] + "_texto") or "").strip() or None
+    for e in sgen.EVALUACION:
+        payload[e["cod"]] = sgen.codigo(e, respuestas.get(e["cod"]))
+    payload[cod_res] = sgen.codigo(sgen.RESULTADO, respuestas.get(cod_res))
+    for col, texto in obs.items():
+        payload[col] = (texto or "").strip() or None
+
+    try:
+        _guardar_general(payload)
+    except Exception as e:
+        if "23505" in str(e) or "duplicate key" in str(e).lower():
+            st.error(
+                "Ya hay una entrevista cargada para esa persona con esa fecha. "
+                "Si es una entrevista posterior, cambiá la fecha.")
+        else:
+            st.error("No se pudo registrar la entrevista. Intentá de nuevo.")
+        return
+
+    _leer_general.clear()
+    st.session_state["saved_ok_sgg"] = True
+    st.session_state["saved_msg_sgg"] = (
+        f"✓ Entrevista registrada — **{r['apenom']}** · "
+        f"{fecha_entrevista.strftime('%d/%m/%Y')}")
+    st.session_state["sgg_form_seed"] = seed + 1
+    st.rerun()
+
+
+def _gen_detalle(fila) -> None:
+    """Vista ampliada de una entrevista del personal no conductor."""
+    etiqueta_ind, color_ind = sgen.banda(fila["indice_general"])
+    _, color_ev = sgen.banda(fila["indice_evaluacion"])
+
+    def _chip(texto, color):
+        return (f'<span class="det-chip" style="background:{color}18;color:{color};'
+                f'border:1px solid {color}40;">{texto}</span>')
+
+    chips = _chip(f'Índice {_fmt(fila["indice_general"], "", 1)} · {etiqueta_ind}', color_ind)
+    chips += _chip(f'Evaluación del sector {_fmt(fila["indice_evaluacion"], "", 1)}', color_ev)
+    resultado = _txt(fila.get("resultado"))
+    if resultado:
+        chips += _chip(_esc(resultado),
+                       sgen.COLOR_RESULTADO.get(resultado, sgen.COLOR_BUENO))
+    if fila["nivel_alerta"]:
+        chips += _chip(f'Alerta {fila["nivel_alerta"]}',
+                       "#D12F19" if fila["nivel_alerta"] == "Roja" else "#B45309")
+
+    lugar = " · ".join(x for x in (_esc(fila.get("cargo")), _esc(fila.get("sector")),
+                                   _esc(fila.get("base")), _esc(fila.get("empleador"))) if x)
+    st.markdown(f"""
+    <div class="det-head">
+      <div class="det-name">{_esc(fila["apenom"])}</div>
+      <div class="det-meta">
+        Legajo {_esc(fila["legajo"])} · {lugar}<br>
+        Ingreso: {_fecha_txt(fila.get("fecha_ingreso"))} · Entrevista: {_fecha_txt(fila["fecha_entrevista"])} · Entrevistador: {_esc(fila["entrevistador"])}
+      </div>
+      <div class="det-chips">{chips}</div>
+    </div>
+    """, unsafe_allow_html=True)
+
+    if fila["motivos_alerta"]:
+        st.warning("**Motivos de alerta** — " + " · ".join(fila["motivos_alerta"]))
+
+    # El texto libre lo escribió una persona: se escapa antes de ir al HTML.
+    secciones = [
+        (titulo, [dict(it, respuesta=_esc(it["respuesta"]), textual=_esc(it["textual"]),
+                       observacion=_esc(it["observacion"])) for it in items])
+        for titulo, items in sgen.detalle_entrevista(fila, incluir_textos=PUEDE_EDITAR)
+    ]
+    corte = len(sgen.SECCIONES)     # 1-7: lo que dijo el ingresante · 8-9: el cierre
+    col_izq, col_der = st.columns([3, 2], gap="large")
+    with col_izq:
+        st.markdown(_bloques_html(secciones[:corte]), unsafe_allow_html=True)
+    with col_der:
+        st.markdown(_bloques_html(secciones[corte:]), unsafe_allow_html=True)
+        if not PUEDE_EDITAR:
+            st.caption(
+                "Las respuestas abiertas y las observaciones son confidenciales: "
+                "solo las ve quien tiene permiso de carga en esta sección.")
+
+
+def _gen_tab_listado(df_gen, filtrar, rojas_ocultas) -> None:
+    """Pestaña «Entrevistas cargadas» del personal no conductor."""
+    if df_gen.empty:
+        st.info("Todavía no hay entrevistas cargadas.")
+        return
+
+    def _aviso_rojas_ocultas(key):
+        if not rojas_ocultas:
+            return
+        c_txt, c_btn = st.columns([9, 3], vertical_alignment="center")
+        with c_txt:
+            st.caption(_gen_texto_rojas_ocultas(rojas_ocultas))
+        with c_btn:
+            if st.button("Mostrar todas las rojas", key=key, width="stretch"):
+                st.session_state["_abrir_rojas_sgg"] = True
+                st.rerun()
+
+    # ══ Vista ampliada de una entrevista ══
+    ver_id = st.session_state.get("ver_id_sgg")
+    if ver_id is not None and (df_gen["id"] == ver_id).any():
+        # Los filtros no se dibujan en esta vista y Streamlit descarta el estado
+        # de un widget que no se dibujó: se reasignan para que al volver al
+        # listado sigan como estaban.
+        for clave in FILTROS_GENERAL:
+            st.session_state[clave] = st.session_state[clave]
+
+        fila = df_gen[df_gen["id"] == ver_id].iloc[0]
+        c_volver, c_desc = st.columns([1, 3])
+        with c_volver:
+            if st.button("←  Volver al listado", key="btn_volver_sgg", width="stretch"):
+                st.session_state.pop("ver_id_sgg", None)
+                # Nueva key para la tabla: si no, la selección vieja volvería a
+                # abrir esta misma entrevista al instante.
+                st.session_state["tabla_seed_sgg"] = \
+                    st.session_state.get("tabla_seed_sgg", 0) + 1
+                st.rerun()
+        with c_desc:
+            if st.download_button(
+                "⬇  Descargar esta entrevista (Excel)",
+                data=sgen.exportar_excel(fila.to_frame().T, incluir_textos=PUEDE_EDITAR),
+                file_name=(f"entrevista_ingresante_{fila['legajo']}_"
+                           f"{fila['fecha_entrevista'].strftime('%d-%m-%Y')}.xlsx"),
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                key="dl_una_sgg",
+            ):
+                auditoria.registrar(
+                    "seguimiento", "export",
+                    f"Descargó la entrevista de personal ingresante de {fila['apenom']} "
+                    f"(leg. {fila['legajo']})"
+                    + (" — con observaciones" if PUEDE_EDITAR else " — sin observaciones"),
+                    registro_id=fila["id"],
+                )
+        _gen_detalle(fila)
+        return
+
+    # ══ Listado ══
+    st.session_state.pop("ver_id_sgg", None)
+    sectores = ["Todos"] + sorted({_txt(s) for s in df_gen["sector"] if _txt(s)})
+    if st.session_state["sector_sgg"] not in sectores:      # se eliminó la última de ese sector
+        st.session_state["sector_sgg"] = "Todos"
+
+    f1, f2, f3, f4 = st.columns([2, 2, 2, 2], gap="medium")
+    # Sin `value=` / `index=`: el default lo pone session_state más arriba, así
+    # el botón «Mostrar todas las rojas» puede reescribirlo.
+    with f1:
+        desde = st.date_input("Desde", key="desde_sgg")
+    with f2:
+        hasta = st.date_input("Hasta", key="hasta_sgg")
+    with f3:
+        sector_sel = st.selectbox("Sector", options=sectores, key="sector_sgg")
+    with f4:
+        resultado_sel = st.selectbox(
+            "Resultado", options=["Todos"] + list(sgen.RESULTADOS), key="resultado_sgg")
+
+    f = filtrar(df_gen).copy()
+
+    if f.empty:
+        if desde > hasta:
+            st.warning(
+                f"El «Desde» ({desde.strftime('%d/%m/%Y')}) es posterior al «Hasta» "
+                f"({hasta.strftime('%d/%m/%Y')}): el período está invertido.")
+        elif sector_sel != "Todos" or resultado_sel != "Todos":
+            activos = " y ".join(
+                x for x in (f"sector «{sector_sel}»" if sector_sel != "Todos" else "",
+                            f"resultado «{resultado_sel}»" if resultado_sel != "Todos" else "")
+                if x)
+            st.info(
+                f"No hay entrevistas entre el {desde.strftime('%d/%m/%Y')} y el "
+                f"{hasta.strftime('%d/%m/%Y')} con {activos}.")
+        else:
+            st.info(
+                f"No hay entrevistas cargadas entre el {desde.strftime('%d/%m/%Y')} "
+                f"y el {hasta.strftime('%d/%m/%Y')}.")
+        _aviso_rojas_ocultas("btn_rojas_vacio_sgg")
+    else:
+        # ── Alertas primero ──
+        alertas = sgen.detectar_alertas(f)
+        st.markdown('<p class="section-label">Alertas</p>', unsafe_allow_html=True)
+        _aviso_rojas_ocultas("btn_rojas_listado_sgg")
+        if alertas.empty:
+            st.success("✓ Ninguna entrevista del período disparó alertas.")
+        else:
+            def _fila_alerta(a):
+                clase = "alert-row" if a["nivel_alerta"] == "Roja" else "alert-row amber"
+                quote = ""
+                if PUEDE_EDITAR and _txt(a.get(sgen.OBS_FINALES)):
+                    quote = f'<div class="alert-quote">{_esc(a.get(sgen.OBS_FINALES))}</div>'
+                lugar = " · ".join(x for x in (_esc(a.get("cargo")), _esc(a.get("sector"))) if x)
+                c_txt, c_btn = st.columns([9, 2], vertical_alignment="center")
+                with c_txt:
+                    st.markdown(
+                        f'<div class="{clase}">'
+                        f'<div class="alert-name">{_esc(a["apenom"])} · Legajo {_esc(a["legajo"])}</div>'
+                        f'<div class="alert-meta">{lugar or "Sin sector"} · '
+                        f'{_fecha_txt(a["fecha_entrevista"])} · '
+                        f'Índice {_fmt(a["indice_general"])} · '
+                        f'{_esc(" · ".join(a["motivos_alerta"]))}</div>'
+                        f'{quote}</div>',
+                        unsafe_allow_html=True,
+                    )
+                with c_btn:
+                    if st.button("Ver entrevista", key=f"ver_al_sgg_{a['id']}", width="stretch"):
+                        st.session_state["ver_id_sgg"] = a["id"]
+                        _auditar_apertura_general(a)
+                        st.rerun()
+
+            # Igual que en conductores: las rojas siempre desplegadas, las de
+            # atención plegadas con el número a la vista.
+            rojas_f = alertas[alertas["nivel_alerta"] == "Roja"]
+            atencion_f = alertas[alertas["nivel_alerta"] != "Roja"]
+            if not rojas_f.empty:
+                st.caption(
+                    f"**{len(rojas_f)}** para revisar ya — no se recomienda la continuidad, "
+                    "la persona no quiere continuar o el sector la evaluó insuficiente.")
+                for _, a in rojas_f.iterrows():
+                    _fila_alerta(a)
+            if not atencion_f.empty:
+                with st.expander(f"Atención ({len(atencion_f)}) — revisar cuando puedas"):
+                    for _, a in atencion_f.iterrows():
+                        _fila_alerta(a)
+            if not PUEDE_EDITAR:
+                st.caption(
+                    "Las observaciones son confidenciales y solo las ve quien tiene "
+                    "permiso de carga en esta sección.")
+
+        st.divider()
+        st.markdown('<p class="section-label">Entrevistas del período</p>',
+                    unsafe_allow_html=True)
+        vista = pd.DataFrame({
+            "Legajo": f["legajo"],
+            "Nombre": f["apenom"],
+            "Puesto": f["cargo"].fillna("—"),
+            "Sector": f["sector"].fillna("—"),
+            "Fecha": f["fecha_entrevista"].apply(_fecha_txt),
+            "Índice": pd.to_numeric(f["indice_general"], errors="coerce").round(1),
+            "Evaluación": pd.to_numeric(f["indice_evaluacion"], errors="coerce").round(1),
+            "Resultado": f["resultado"].fillna("—"),
+            "Alerta": f["nivel_alerta"].replace("", "—"),
+            "Entrevistador": f["entrevistador"],
+        })
+        evento = st.dataframe(
+            vista, width="stretch", hide_index=True,
+            on_select="rerun", selection_mode="single-row",
+            key=f"tabla_sgg_{st.session_state.get('tabla_seed_sgg', 0)}",
+        )
+        st.caption("Hacé clic en una fila para abrir la entrevista completa.")
+
+        filas_sel = list((evento or {}).get("selection", {}).get("rows", []))
+        if filas_sel:
+            st.session_state["ver_id_sgg"] = f.iloc[filas_sel[0]]["id"]
+            _auditar_apertura_general(f.iloc[filas_sel[0]])
+            st.rerun()
+
+        if st.download_button(
+            "⬇  Descargar entrevistas (Excel)",
+            data=sgen.exportar_excel(f, incluir_textos=PUEDE_EDITAR),
+            file_name=(f"seguimiento_personal_{desde.strftime('%d-%m-%Y')}"
+                       f"_a_{hasta.strftime('%d-%m-%Y')}.xlsx"),
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            key="dl_todas_sgg",
+        ):
+            auditoria.registrar(
+                "seguimiento", "export",
+                f"Descargó {len(f)} entrevista(s) de personal ingresante del "
+                f"{desde.strftime('%d/%m/%Y')} al {hasta.strftime('%d/%m/%Y')}"
+                + (" — con observaciones" if PUEDE_EDITAR else " — sin observaciones"),
+                datos={"registros": int(len(f)), "cuestionario": "general"},
+            )
+
+    # ── Eliminar ──
+    if not PUEDE_EDITAR:
+        return
+    st.divider()
+    if st.session_state.pop("deleted_ok_sgg", False):
+        st.success("Entrevista eliminada correctamente.")
+    with st.expander("Eliminar una entrevista"):
+        labels = {
+            f"{r['apenom']} · {_fecha_txt(r['fecha_entrevista'])} · Legajo {r['legajo']}": r["id"]
+            for _, r in df_gen.iterrows() if pd.notna(r["fecha_entrevista"])
+        }
+        elegido = st.selectbox("Entrevista", options=list(labels), index=None,
+                               placeholder="Seleccioná una entrevista...", key="del_sel_sgg")
+        if st.button("Eliminar entrevista", key="btn_del_sgg") and elegido:
+            st.session_state["del_id_sgg"] = labels[elegido]
+            st.session_state["del_label_sgg"] = elegido
+            st.rerun()
+
+        if "del_id_sgg" in st.session_state:
+            st.warning(
+                f"¿Eliminar **{st.session_state['del_label_sgg']}**? "
+                "Esta acción no se puede deshacer.")
+            c1, c2 = st.columns([1, 1])
+            with c1:
+                if st.button("Sí, eliminar", key="btn_confirm_sgg"):
+                    try:
+                        _eliminar_general(st.session_state["del_id_sgg"],
+                                          st.session_state.get("del_label_sgg", ""))
+                        st.session_state["deleted_ok_sgg"] = True
+                    except Exception:
+                        st.error("No se pudo eliminar la entrevista.")
+                    st.session_state.pop("del_id_sgg", None)
+                    st.session_state.pop("del_label_sgg", None)
+                    _leer_general.clear()
+                    st.rerun()
+            with c2:
+                if st.button("Cancelar", key="btn_cancel_sgg"):
+                    st.session_state.pop("del_id_sgg", None)
+                    st.session_state.pop("del_label_sgg", None)
+                    st.rerun()
+
+
+def _gen_texto_rojas_ocultas(n) -> str:
+    plural = "s" if n != 1 else ""
+    return (f"{n} alerta{plural} roja{plural} "
+            f"queda{'n' if n != 1 else ''} fuera de los filtros actuales.")
+
+
+def _gen_barras_apiladas(dist):
+    """Barras al 100 % por pregunta, con la peor puntuada arriba.
+
+    El color de cada tramo sale de los puntos de esa respuesta (la misma paleta
+    del detalle), no de su posición: «Buena» y «Parcialmente» son las dos la
+    opción del medio, pero no valen lo mismo.
+    """
+    orden = dist.drop_duplicates("cod").sort_values("indice", ascending=False)
+    fig = go.Figure()
+    for valor in sorted(dist["valor"].unique()):
+        sub = dist[dist["valor"] == valor].set_index("cod").reindex(orden["cod"])
+        fig.add_trace(go.Bar(
+            y=list(orden["rotulo"]), x=sub["pct"], orientation="h",
+            marker_color=[sgen.color_puntos(p) for p in sub["puntos"]],
+            customdata=sub[["n", "etiqueta"]].values,
+            hovertemplate="%{y}<br>%{customdata[1]}: %{customdata[0]} (%{x:.0f}%)<extra></extra>",
+        ))
+    fig.update_layout(**chart_base(
+        barmode="stack", height=70 + 34 * len(orden), showlegend=False,
+        xaxis=dict(range=[0, 100], ticksuffix="%", showgrid=False,
+                   zeroline=False, linecolor="#CCCCCC",
+                   tickfont=dict(color="#8C8987")),
+        yaxis=dict(showgrid=False, zeroline=False, linecolor="#CCCCCC",
+                   tickfont=dict(color="#8C8987", size=11)),
+        margin=dict(l=10, r=10, t=10, b=10),
+    ))
+    return fig
+
+
+def _gen_barras_frecuencia(frec, colores):
+    """Barras horizontales de una categoría, en el orden del catálogo."""
+    frec = frec.iloc[::-1]          # Plotly dibuja de abajo hacia arriba
+    fig = go.Figure(go.Bar(
+        x=frec["n"], y=frec["categoria"], orientation="h",
+        marker_color=[colores.get(c, COLOR_PRIMARY) for c in frec["categoria"]],
+        text=[f"{n}  ({p:.0f}%)" for n, p in zip(frec["n"], frec["pct"])],
+        textposition="outside",
+        hovertemplate="%{y}<br>%{x} entrevistas<extra></extra>",
+    ))
+    fig.update_layout(**chart_base(
+        height=80 + 36 * len(frec), showlegend=False,
+        xaxis=dict(showgrid=True, gridcolor="#E8E8E8", zeroline=False,
+                   linecolor="#CCCCCC", tickfont=dict(color="#8C8987"),
+                   range=[0, max(frec["n"]) * 1.35]),
+        yaxis=dict(showgrid=False, zeroline=False, linecolor="#CCCCCC",
+                   tickfont=dict(color="#8C8987")),
+        margin=dict(l=10, r=30, t=10, b=10),
+    ))
+    return fig
+
+
+def _gen_tab_indicadores(df_gen) -> None:
+    """Pestaña «Indicadores» del personal no conductor (agregado, sin nombres)."""
+    if df_gen.empty:
+        st.info("Todavía no hay entrevistas cargadas para calcular indicadores.")
+        return
+
+    kpis = sgen.resumen_kpis(df_gen)
+    etiqueta_banda, color_ind = sgen.banda(kpis["indice_general"])
+    _, color_ev = sgen.banda(kpis["evaluacion"])
+    st.markdown(
+        '<div class="kpi6">'
+        + _kpi_card("Entrevistas", _fmt(kpis["entrevistas"]), "cargadas en total")
+        + _kpi_card("Índice general", _fmt(kpis["indice_general"], "", 1),
+                    etiqueta_banda, color_ind)
+        + _kpi_card("Evaluación del sector", _fmt(kpis["evaluacion"], "", 1),
+                    "cómo ve el sector al ingresante", color_ev)
+        + _kpi_card("Quieren continuar", _fmt(kpis["quieren_continuar"], "%"),
+                    "responden que sí", COLOR_SECONDARY)
+        + _kpi_card("Continuidad", _fmt(kpis["continuidad"], "%"),
+                    "recomendada, con o sin seguimiento", "#15803D")
+        + _kpi_card("Con alerta", _fmt(kpis["alertas"]),
+                    _fmt(kpis["pct_alertas"], "% del total"), "#D12F19")
+        + '</div>',
+        unsafe_allow_html=True,
+    )
+    st.caption(
+        "Índices de 0 a 100. **Sí · Muy buena · Muy conforme = 100 — Buena · Conforme = 67 "
+        "— Parcialmente · Tal vez = 50 — Regular · Poco conforme = 33 — No = 0.** "
+        "No se comparan con los de conductores: son otras preguntas.")
+
+    st.divider()
+
+    # ── 1. Resultado de las entrevistas ──
+    st.markdown('<p class="section-label">Resultado de las entrevistas</p>',
+                unsafe_allow_html=True)
+    frec = sgen.frecuencia_categoria(df_gen, sgen.RESULTADO["cod"])
+    if frec.empty:
+        st.info("Todavía no hay resultados cargados.")
+    else:
+        st.plotly_chart(_gen_barras_frecuencia(frec, sgen.COLOR_RESULTADO),
+                        use_container_width=True, key="fig_resultado_sgg")
+
+    st.divider()
+
+    # ── 2. Índice por dimensión ──
+    st.markdown('<p class="section-label">Índice por dimensión</p>', unsafe_allow_html=True)
+    dims = sgen.resumen_dimensiones(df_gen).dropna(subset=["indice"])
+    if dims.empty:
+        st.info("Todavía no hay respuestas suficientes para calcular los índices.")
+    else:
+        dims = dims.sort_values("indice", ascending=False)
+        fig = go.Figure(go.Bar(
+            x=dims["indice"],
+            y=[f"{r['nombre']}  (n={int(r['n_items'])} ítems)" for _, r in dims.iterrows()],
+            orientation="h",
+            marker_color=[sgen.banda(v)[1] for v in dims["indice"]],
+            text=[f"{v:.1f}" for v in dims["indice"]],
+            textposition="outside",
+            hovertemplate="%{y}<br>Índice: %{x:.1f}<extra></extra>",
+        ))
+        fig.update_layout(**chart_base(
+            height=60 + 46 * len(dims), showlegend=False,
+            xaxis=dict(range=[0, 112], showgrid=True, gridcolor="#E8E8E8",
+                       zeroline=False, linecolor="#CCCCCC",
+                       tickfont=dict(color="#8C8987")),
+            yaxis=dict(showgrid=False, zeroline=False, linecolor="#CCCCCC",
+                       tickfont=dict(color="#8C8987")),
+            margin=dict(l=10, r=40, t=10, b=10),
+        ))
+        st.plotly_chart(fig, use_container_width=True, key="fig_dims_sgg")
+        st.caption(
+            "Lo que respondió el ingresante. La evaluación del sector va aparte, más "
+            "abajo: es otra voz. Arriba, la dimensión con menor índice.")
+
+    st.divider()
+
+    # ── 3. Respuestas por pregunta ──
+    leyenda = ("Verde: la mejor respuesta · celeste: Buena / Conforme · ámbar: "
+               "Parcialmente / Tal vez / Regular / Poco conforme · rojo: No / Insuficiente.")
+    st.markdown('<p class="section-label">Respuestas por pregunta</p>', unsafe_allow_html=True)
+    dist = sgen.distribucion_items(df_gen)
+    if dist.empty:
+        st.info("Todavía no hay respuestas cerradas cargadas.")
+    else:
+        st.plotly_chart(_gen_barras_apiladas(dist), use_container_width=True,
+                        key="fig_items_sgg")
+        st.caption("Ordenado de peor a mejor: arriba, las preguntas con menor índice. "
+                   + leyenda)
+
+    st.divider()
+
+    c_eval, c_cat = st.columns(2, gap="large")
+
+    # ── 4. Evaluación del sector ──
+    with c_eval:
+        st.markdown('<p class="section-label">Evaluación del sector</p>',
+                    unsafe_allow_html=True)
+        dist_ev = sgen.distribucion_items(df_gen, sgen.EVALUACION)
+        if dist_ev.empty:
+            st.info("Todavía no hay evaluaciones cargadas.")
+        else:
+            st.plotly_chart(_gen_barras_apiladas(dist_ev), use_container_width=True,
+                            key="fig_eval_sgg")
+            st.caption("Cómo evaluó cada sector a sus ingresantes. " + leyenda)
+
+    # ── 5. Las dos preguntas que no puntúan ──
+    with c_cat:
+        st.markdown('<p class="section-label">Preguntas que no puntúan</p>',
+                    unsafe_allow_html=True)
+        opciones_cat = {f"{p['n']}. {p['corto']}": p["cod"] for p in sgen.CATEGORIAS}
+        cat_label = st.radio("Pregunta", options=list(opciones_cat), horizontal=True,
+                             label_visibility="collapsed", key="cat_sgg")
+        frec = sgen.frecuencia_categoria(df_gen, opciones_cat[cat_label])
+        if frec.empty:
+            st.info("Todavía no hay respuestas cargadas para esta pregunta.")
+        else:
+            st.plotly_chart(_gen_barras_frecuencia(frec, {}), use_container_width=True,
+                            key="fig_cat_sgg")
+            st.caption("Describen, no evalúan: no entran en ningún índice.")
+
+    st.divider()
+
+    # ── 6. Corte por sector ──
+    st.markdown('<p class="section-label">Índice por sector</p>', unsafe_allow_html=True)
+    tabla_sector, excluidos = sgen.corte_por_sector(df_gen)
+    if tabla_sector.empty:
+        st.info(f"Ningún sector llega todavía a {sgen.MIN_N_CORTE} entrevistas.")
+    else:
+        st.dataframe(pd.DataFrame({
+            "Sector": tabla_sector["sector"],
+            "Entrevistas": tabla_sector["n"],
+            "Índice": tabla_sector["indice"].round(1),
+            "Evaluación del sector": tabla_sector["evaluacion"].round(1),
+        }), width="stretch", hide_index=True)
+    if excluidos:
+        st.caption(
+            f"Solo se muestran sectores con {sgen.MIN_N_CORTE} o más entrevistas. "
+            f"Quedan fuera: {', '.join(excluidos)}.")
+
+
+def _vista_general(df_emp) -> None:
+    """Todo el cuestionario del personal no conductor, debajo del selector."""
+    try:
+        df_gen = sgen.calcular_indices(_leer_general())
+    except Exception:
+        st.error("No se pudieron cargar las entrevistas. Revisá la conexión con la base.")
+        st.caption("Si este cuestionario todavía no se usó nunca, puede faltar crear su "
+                   "tabla en Supabase (`migration_seguimiento_general.sql`).")
+        if st.button("Reintentar", key="retry_db_sgg"):
+            _leer_general.clear()
+            st.rerun()
+        return
+
+    # Los defaults de los filtros viven en session_state por lo mismo que en
+    # conductores: el banner se dibuja antes que ellos y necesita su recorte.
+    hoy = date.today()
+    st.session_state.setdefault("desde_sgg", hoy.replace(month=1, day=1))
+    st.session_state.setdefault("hasta_sgg", hoy)
+    st.session_state.setdefault("sector_sgg", "Todos")
+    st.session_state.setdefault("resultado_sgg", "Todos")
+
+    def filtrar(df):
+        """El recorte que ve el listado; el banner cuenta sobre exactamente lo mismo."""
+        out = df[(df["fecha_entrevista"] >= st.session_state["desde_sgg"]) &
+                 (df["fecha_entrevista"] <= st.session_state["hasta_sgg"])]
+        if st.session_state["sector_sgg"] != "Todos":
+            out = out[out["sector"] == st.session_state["sector_sgg"]]
+        if st.session_state["resultado_sgg"] != "Todos":
+            out = out[out["resultado"] == st.session_state["resultado_sgg"]]
+        return out
+
+    rojas = df_gen[df_gen["nivel_alerta"] == "Roja"] if not df_gen.empty else df_gen
+
+    # El botón «Mostrar todas las rojas» vive junto a los filtros, pero Streamlit
+    # no deja escribir la key de un widget ya instanciado: deja pedido el cambio
+    # y se aplica acá, antes de que los widgets existan.
+    if st.session_state.pop("_abrir_rojas_sgg", False) and len(rojas):
+        fechas = rojas["fecha_entrevista"].dropna()
+        if not fechas.empty:
+            st.session_state["desde_sgg"] = min(fechas.min(), st.session_state["desde_sgg"])
+            st.session_state["hasta_sgg"] = max(fechas.max(), st.session_state["hasta_sgg"])
+        st.session_state["sector_sgg"] = "Todos"
+        st.session_state["resultado_sgg"] = "Todos"
+
+    rojas_ocultas = len(rojas) - len(filtrar(rojas)) if len(rojas) else 0
+
+    # Contenedor fijo: el banner aparece y desaparece con los datos, y suelto
+    # arriba de st.tabs haría que Streamlit vuelva a montar las pestañas en la
+    # primera justo después de eliminar una entrevista.
+    with st.container():
+        if len(rojas):
+            n = len(rojas)
+            st.error(
+                f"**{n} entrevista{'s' if n != 1 else ''} con alerta roja** — "
+                "revisalas en la pestaña «Entrevistas cargadas»."
+                + (f" {_gen_texto_rojas_ocultas(rojas_ocultas)}" if rojas_ocultas else ""))
+
+    tab_form, tab_carga, tab_ind = st.tabs(
+        ["Nueva entrevista", "Entrevistas cargadas", "Indicadores"])
+    with tab_form:
+        _gen_tab_form(df_emp, df_gen)
+    with tab_carga:
+        _gen_tab_listado(df_gen, filtrar, rojas_ocultas)
+    with tab_ind:
+        _gen_tab_indicadores(df_gen)
+
+
+# ─── Header + selector de cuestionario ────────────────────────
+# Se define acá y no más abajo porque los dos cuestionarios lo consultan.
+PUEDE_EDITAR = can_edit("seguimiento")
+
+st.markdown("""
+<div class="page-title">
+  <div class="accent-bar"></div>
+  <h1>Seguimiento</h1>
+</div>
+""", unsafe_allow_html=True)
+
+# Cambiar de cuestionario redibuja la pantalla con el otro formulario: lo que
+# estuviera a medio cargar en el anterior se descarta (el formulario lo avisa).
+CUESTIONARIO = st.radio(
+    "Cuestionario", options=[CUEST_CONDUCTORES, CUEST_GENERAL], horizontal=True,
+    label_visibility="collapsed", key="cuestionario_sg",
+)
+st.markdown(f'<p class="page-subtitle">{SUBTITULOS[CUESTIONARIO]}</p>',
+            unsafe_allow_html=True)
+
 # ─── Carga del padrón ─────────────────────────────────────────
 df_emp = pd.DataFrame(columns=["legajo", "apenom", "empleador", "cargo", "str", "fecha_inicio"])
 df_full = pd.DataFrame()
@@ -628,6 +1516,15 @@ except Exception:
         st.rerun()
     st.stop()
 
+# El cuestionario del resto del personal termina acá: de este punto para abajo
+# todo es el de conductores.
+if CUESTIONARIO == CUEST_GENERAL:
+    _vista_general(df_emp)
+    st.stop()
+
+# ══════════════════════════════════════════════════════════════
+# Cuestionario «Conductores» (2° mes)
+# ══════════════════════════════════════════════════════════════
 # Atrapa las dos grafías reales del padrón: CONDUCTORES y CONDUCTOR.
 df_cond = df_emp[df_emp["cargo"].astype(str).str.startswith("CONDUCTOR", na=False)]
 opciones_map = {
@@ -644,8 +1541,6 @@ except Exception:
         _leer.clear()
         st.rerun()
     st.stop()
-
-PUEDE_EDITAR = can_edit("seguimiento")
 
 # ─── Filtros del listado ──────────────────────────────────────
 # Los defaults viven en session_state y no en el `value=` del widget, por dos
@@ -718,15 +1613,7 @@ def _aviso_rojas_ocultas(key):
             st.rerun()
 
 
-# ─── Header ───────────────────────────────────────────────────
-st.markdown("""
-<div class="page-title">
-  <div class="accent-bar"></div>
-  <h1>Seguimiento de Conductores</h1>
-</div>
-<p class="page-subtitle">Entrevista de seguimiento del 2° mes: registrá las respuestas y medí la adaptación de cada conductor nuevo.</p>
-""", unsafe_allow_html=True)
-
+# El título y el subtítulo ya se dibujaron arriba, junto al selector de cuestionario.
 # Banner de alertas rojas abiertas
 if len(ROJAS):
     rojas = len(ROJAS)
@@ -846,7 +1733,8 @@ with tab_form:
                 # Marcador que solo existe mientras se muestra ESTE formulario:
                 # ancla la guarda de salida a esta pantalla (ver _guardia_salida).
                 st.markdown('<span id="sg-guard-marker"></span>', unsafe_allow_html=True)
-                st.caption("No cierres la pestaña hasta guardar la entrevista.")
+                st.caption("No cierres la pestaña ni cambies de cuestionario hasta "
+                           "guardar la entrevista.")
                 submitted = st.form_submit_button("Registrar entrevista")
 
             # Red de contención de B0: avisa si se recarga/cierra con el form a

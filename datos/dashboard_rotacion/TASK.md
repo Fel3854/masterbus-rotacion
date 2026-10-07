@@ -93,7 +93,7 @@ derecha, entrando como dueño de la app) → **⋮** → **Reboot app**.
 | Adelantos de Sueldo | Alta de adelantos + exportación Excel formato Santander |
 | Descuentos | Alta de descuentos con cuotas + exportación TXT para liquidación |
 | Vencimientos | Control de documentación y habilitaciones próximas a vencer |
-| **Seguimiento** | **Entrevista de seguimiento del 2° mes de cada conductor: carga tabulada, cola de pendientes e indicadores de adaptación** |
+| **Seguimiento** | **Entrevistas al personal ingresante, con dos cuestionarios que se eligen arriba de la pantalla: conductores (2° mes) y resto del personal (efectivización). Carga tabulada, alertas e indicadores** |
 | Minutas Reunión | Temas y acciones de RRHH con estado y fecha límite |
 | Postulantes | Registro de entrevistas a postulantes (FORM 045 02): consulta con `ver_postulantes`; alta, edición, anulación e importación con `edit_postulantes` |
 | Auditoría | Registro de movimientos de los usuarios (`auditoria.py`). Sólo admin; tabla append-only |
@@ -306,6 +306,25 @@ Digitaliza el formulario de entrevista del 2° mes (`seguimiento_Conductor_2do_M
 - **Tabla**: `seguimiento_conductores` (47 columnas). Ver `migration_seguimiento_conductores.sql`. Clave única `(legajo, empleador, fecha_entrevista)`: bloquea el duplicado por doble submit pero permite un re-seguimiento posterior. El legajo no es único entre empresas.
 - **Índices no se guardan**: se recalculan en pandas para que la fórmula viva en un solo lugar.
 - **Tests**: `python3 -m pytest tests/ -q` (40 tests, sin Streamlit ni red).
+
+### Seguimiento del resto del personal
+
+`seguimiento_general.py` + la misma `pages/5_Seguimiento.py` + `migration_seguimiento_general.sql` + `tests/test_seguimiento_general.py`.
+
+Segundo cuestionario del ítem Seguimiento (2026-10): la «Encuesta de seguimiento – personal ingresante», previa a la efectivización, para todo el que **no** es conductor. Se elige con el selector de arriba de la página (`cuestionario_sg`); al entrar se abre Conductores.
+
+- **Módulo y tabla aparte, a propósito.** No comparte preguntas ni forma con el de conductores (respuestas de 3 opciones, una evaluación que hace el sector, un resultado, observaciones por sección y no por pregunta). Generalizar `seguimiento.py` era reescribir un módulo en producción para dos casos; si aparece un tercer formulario, ahí sí conviene pasar a formato largo. Las funciones de `seguimiento_general.py` llevan los mismos nombres que las de `seguimiento.py` para que esa unificación sea mecánica.
+- **En la página, el cuestionario nuevo corre y hace `st.stop()`** antes del código de conductores, que quedó igual salvo el encabezado (ahora común) y `PUEDE_EDITAR`, que se define más arriba. Las keys de `session_state` del nuevo llevan `sgg`. Sólo se dibuja uno de los dos por vez: cambiar de cuestionario descarta el formulario a medio cargar, igual que cambiar de página (el formulario lo avisa y la guarda de salida cubre a los dos).
+- **Quién es «el resto»**: `solo_no_conductores()` es el complemento exacto del filtro de conductores (cargo que no empieza con `CONDUCTOR`); hay un test que cuida que entre los dos no quede nadie afuera ni repetido.
+- **Sector**: el padrón no lo trae (`str` es la operación, que se guarda como `base`, y `cargo` es el puesto). Lo carga el entrevistador en un selectbox que acepta valores nuevos y ofrece los ya usados; `normalizar_sector()` lo guarda en mayúsculas y sin tildes, con la grafía del padrón.
+- **Puntos por palabra, no por posición**: Sí · Muy buena · Muy conforme = 100, Buena · Conforme = 67, Parcialmente · Tal vez = 50, Regular · Poco conforme = 33, No · Insuficiente = 0. «Buena» y «Regular» valen lo mismo que en la escala 1-4 de conductores (con test), pero los índices de los dos cuestionarios **no se comparan**: son otras preguntas. En la base se guarda la posición de la respuesta (la mejor = cantidad de opciones, la peor = 1); los puntos viven sólo en el catálogo.
+- **Dos índices**: `indice_general` (lo que dijo el ingresante: 13 escalas) e `indice_evaluacion` (sección 8, cómo lo evaluó el sector). No se mezclan: son dos voces. Las preguntas 5 y 14 son categorías que no puntúan; la 10 es abierta.
+- **Dimensiones = secciones**, salvo Motivación y Expectativas, que van juntas porque Motivación tiene una sola pregunta que puntúa.
+- **Alertas**: roja si el resultado es «No recomendar continuidad», si no quiere continuar (g15) o si el sector evaluó «Insuficiente»; atención si requiere plan de mejora, si está poco conforme (g13), si el índice es menor a 50 o si hay 3 o más respuestas en la opción más baja. «Continuidad con seguimiento» no es alerta.
+- **Confidencialidad**: todo el texto libre (`COLUMNAS_TEXTO`: la pregunta abierta, los detalles y las observaciones) lo ve sólo quien tiene `edit_seguimiento`, igual que los textuales de conductores. El resultado y la evaluación del sector son respuestas cerradas: los ven todos. La auditoría registra alta, baja, apertura y exportación con el módulo `seguimiento` y nunca el contenido ni el resultado.
+- **Tabla**: `seguimiento_general`, clave única `(legajo, empleador, fecha_entrevista)`. RLS con policies de SELECT, INSERT y DELETE, sin UPDATE ni `FOR ALL`: las entrevistas no se editan. Si se agrega la edición hay que sumar la policy, o PostgREST no modifica nada y tampoco da error.
+- **Orden de despliegue**: la migración es aditiva (una tabla nueva) y puede ir antes o después del código. Sin ella, Conductores funciona igual y el cuestionario nuevo avisa que no pudo cargar las entrevistas.
+- **Pendiente si se pide**: cola de pendientes y cobertura por mes de ingreso (conductores las tiene); falta definir a cuántos días del ingreso se toma esta encuesta.
 
 ## Parámetros / Variables de entorno
 La URL de la API está embebida en el código (`API_URL` en `utils.py` y `_dashboard.py`).

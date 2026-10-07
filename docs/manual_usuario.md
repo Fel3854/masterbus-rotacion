@@ -1,6 +1,6 @@
 # Manual de Usuario: Plataforma de RRHH - Grupo Master
 
-Este manual está diseñado para explicarte paso a paso cómo utilizar el **Dashboard de Rotación y Gestión de Novedades (Adelantos, Descuentos, Vencimientos y Seguimiento de Conductores)**. La herramienta está pensada para el uso intensivo (*heavy user*) del departamento de Recursos Humanos, centralizando la información en un solo lugar.
+Este manual está diseñado para explicarte paso a paso cómo utilizar el **Dashboard de Rotación y Gestión de Novedades (Adelantos, Descuentos, Vencimientos y Seguimiento del personal ingresante)**. La herramienta está pensada para el uso intensivo (*heavy user*) del departamento de Recursos Humanos, centralizando la información en un solo lugar.
 
 ---
 
@@ -12,7 +12,7 @@ Al ingresar, verás un menú lateral (a la izquierda) que te permitirá navegar 
 2. **Adelantos de Sueldo**
 3. **Descuentos**
 4. **Vencimientos**
-5. **Seguimiento** (entrevistas de conductores)
+5. **Seguimiento** (entrevistas al personal ingresante: conductores y resto del personal)
 6. **Minutas Reunión** (temas y acciones de RRHH)
 7. **Postulantes** (registro de entrevistas a postulantes; sólo visible para quien tiene el permiso)
 8. **Auditoría** y **Usuarios** (sólo visibles para el administrador)
@@ -85,7 +85,18 @@ Esta pantalla te muestra listados de personal o recursos que tienen documentaci�
 
 ---
 
-## 5. Flujo de Trabajo 4: Seguimiento de Conductores
+## 5. Flujo de Trabajo 4: Seguimiento
+
+Debajo del título hay un selector con **dos cuestionarios**:
+
+- **Conductores**: la entrevista de seguimiento del 2° mes.
+- **Resto del personal**: la encuesta de seguimiento del personal ingresante, previa a la efectivización, para todos los que no son conductores.
+
+Cada uno tiene su propio formulario, su listado y sus indicadores, y no se mezclan entre sí. Al entrar a la sección se abre el de Conductores.
+
+> **Cambiar de cuestionario descarta lo que estés cargando sin guardar**, igual que irte a otra sección del menú. Terminá de registrar la entrevista antes de cambiar.
+
+### Cuestionario «Conductores»
 
 Este módulo digitaliza la **entrevista de seguimiento del 2° mes**: la charla individual que RRHH tiene con cada conductor nuevo a los dos meses de haber ingresado. El objetivo no es evaluarlo, sino detectar a tiempo problemas de adaptación, de seguridad o de clima, antes de que se transformen en una baja.
 
@@ -93,7 +104,7 @@ Este módulo digitaliza la **entrevista de seguimiento del 2° mes**: la charla 
 
 La pantalla tiene tres pestañas.
 
-### Pestaña 1: Nueva entrevista
+#### Pestaña 1: Nueva entrevista
 
 A la izquierda está el formulario; a la derecha, **la cola de pendientes**.
 
@@ -111,7 +122,7 @@ Si te falta alguna respuesta, el sistema te avisa **todas juntas** en un solo me
 
 **Cola de pendientes**: lista los conductores activos que ya tienen entre 45 y 120 días de antigüedad y todavía no tienen entrevista cargada. Los que pasaron los 90 días figuran como *Vencidos*. Es la lista de trabajo del mes.
 
-### Pestaña 2: Entrevistas cargadas
+#### Pestaña 2: Entrevistas cargadas
 
 Primero se muestran las **alertas**, porque son lo más importante de esta pantalla. Una entrevista queda marcada cuando:
 
@@ -125,7 +136,7 @@ Debajo está la tabla de entrevistas del período, con filtros por fecha, base y
 
 Al final, quien tiene permiso puede **eliminar** una entrevista cargada por error (pide confirmación).
 
-### Pestaña 3: Indicadores
+#### Pestaña 3: Indicadores
 
 Todo lo de esta pestaña es agregado: **no aparecen nombres**.
 
@@ -139,6 +150,75 @@ Todo lo de esta pestaña es agregado: **no aparecen nombres**.
 - **Qué dicen los conductores**: frecuencia de las respuestas de categoría. "Lo que menos gusta" y "qué cambiarías" miden lo mismo desde ángulos distintos — lo interesante es dónde no coinciden.
 - **Índice por base**: solo se muestran bases con 5 o más entrevistas, para no sacar conclusiones de un caso suelto.
 - **Cobertura por mes de ingreso**: de los que entraron cada mes, a cuántos se entrevistó. El denominador **incluye a quienes ya se dieron de baja**: si no, un conductor que renunció sin ser entrevistado inflaría la cobertura justo en el caso que más importa.
+
+### Cuestionario «Resto del personal»
+
+Digitaliza la **Encuesta de seguimiento – personal ingresante**: la que se le toma, antes de la efectivización, a todo ingresante que no es conductor (taller, lavadero, administración, etc.).
+
+Tiene las mismas tres pestañas y los mismos permisos que el de conductores: carga quien tiene el permiso de *Seguimiento*; el resto ve los puntajes, el resultado y los indicadores, pero **no** las observaciones ni las respuestas abiertas.
+
+#### Pestaña 1: Nueva entrevista
+
+1. **Empleado**: escribí nombre, apellido o legajo. Aparece el personal activo que no es conductor, con su puesto. El puesto, la base y la fecha de ingreso se toman solos del padrón al guardar.
+2. **Sector**: el padrón no lo trae, así que se carga acá. Elegí uno de la lista o escribí uno nuevo y apretá Enter. Se guarda en mayúsculas y sin tildes, y aparece en la lista la próxima vez. Usá siempre el mismo nombre para el mismo sector: los indicadores agrupan por ese texto.
+3. **Fecha de la entrevista** y **Entrevistador** (se completa solo con tu usuario).
+4. **Las 16 preguntas**, en las 7 secciones del formulario en papel: Inducción, Adaptación, Puesto de trabajo, Capacitación, Equipo y ambiente laboral, Motivación y Expectativas. Cada sección cierra con sus **Observaciones**, que son opcionales. En pantalla las secciones van numeradas de corrido del 1 al 9; el papel repite el 2.
+5. **Sección 8 – Evaluación general del sector**: Desempeño, Compromiso y responsabilidad, y Adaptación. Es la evaluación que hace el sector, no lo que responde el ingresante.
+6. **Sección 9 – Resultado de la entrevista**: una sola de las cuatro opciones del papel, más las observaciones finales.
+
+**Importante**: son obligatorias las 15 respuestas cerradas, las 3 de la evaluación del sector y el resultado. La pregunta 10 (qué otra capacitación le sería útil) y las observaciones son opcionales. En las preguntas 5 y 14, si la respuesta es "Sí" hay que completar el detalle.
+
+Como en conductores, si falta algo el sistema lo avisa todo junto, marca en rojo lo que falta y **no se pierde nada de lo que ya cargaste**.
+
+#### Pestaña 2: Entrevistas cargadas
+
+Primero se muestran las **alertas**. Una entrevista queda con alerta **roja** cuando:
+
+- El resultado es **No recomendar continuidad**.
+- La persona responde que **no quiere continuar** en la empresa (pregunta 15).
+- El sector la evaluó **Insuficiente** en Desempeño, Compromiso o Adaptación.
+
+Y queda en **atención** cuando:
+
+- El resultado es **Requiere plan de mejora/capacitación**.
+- Se siente **poco conforme** trabajando en la empresa (pregunta 13).
+- Su **índice general es menor a 50**, o eligió la opción más baja en 3 o más preguntas.
+
+*Recomendar continuidad con seguimiento* no es una alerta: se ve en la columna Resultado y se puede filtrar.
+
+Debajo está la tabla de entrevistas del período, con filtros por fecha, sector y resultado, y el botón para **descargar todo a Excel**. Si no tenés permiso de carga, el Excel sale sin las observaciones ni las respuestas abiertas. Haciendo clic en una fila se abre la entrevista completa.
+
+Al final, quien tiene permiso puede **eliminar** una entrevista cargada por error (pide confirmación).
+
+#### Pestaña 3: Indicadores
+
+Todo lo de esta pestaña es agregado: **no aparecen nombres**.
+
+**Cómo leer los índices**: van de 0 a 100 y cada respuesta vale según lo que dice.
+
+| Respuesta | Puntos |
+|---|---|
+| Sí · Muy buena · Muy conforme | 100 |
+| Buena · Conforme | 67 |
+| Parcialmente · Tal vez | 50 |
+| Regular · Poco conforme | 33 |
+| No · Insuficiente | 0 |
+
+Las bandas son las mismas que en conductores (menos de 50, crítico; más de 84, muy bueno), pero **los índices de un cuestionario no se comparan con los del otro**: son preguntas distintas.
+
+Hay dos índices, y conviene mirarlos juntos:
+
+- **Índice general**: lo que respondió el ingresante (13 preguntas de las secciones 1 a 7).
+- **Evaluación del sector**: cómo lo evaluó su sector (sección 8). Va aparte porque es otra voz.
+
+Las preguntas 5 (si algo le resultó difícil) y 14 (si la empresa podría mejorar la experiencia) **no puntúan**: describen, no evalúan. Se ven en su propio gráfico.
+
+- **Las 6 tarjetas de arriba**: entrevistas cargadas, índice general, evaluación del sector, cuántos quieren continuar, a cuántos se les recomendó la continuidad (con o sin seguimiento) y cuántas entrevistas tienen alerta.
+- **Resultado de las entrevistas**: cuántas terminaron en cada una de las cuatro opciones.
+- **Índice por dimensión**: una barra por sección del formulario; Motivación y Expectativas van juntas. Arriba, la de menor índice.
+- **Respuestas por pregunta**: la pregunta peor puntuada queda arriba.
+- **Evaluación del sector**: cómo se repartieron las evaluaciones en cada una de las tres áreas.
+- **Índice por sector**: solo se muestran sectores con 5 o más entrevistas, para no sacar conclusiones de un caso suelto.
 
 ---
 
@@ -306,7 +386,7 @@ La pestaña **Usuarios** es del administrador. Desde ahí se da de alta a alguie
 Hay una regla general y tres excepciones:
 
 - **Todos ven todas las secciones.** Los permisos sólo habilitan *cargar, editar y eliminar*.
-- **Excepción 1:** el permiso de *Seguimiento* además habilita ver las respuestas textuales de las entrevistas, que son confidenciales. Dárselo a alguien es dejarlo leer lo que el conductor dijo bajo promesa de confidencialidad.
+- **Excepción 1:** el permiso de *Seguimiento* además habilita ver las respuestas textuales de las entrevistas, que son confidenciales. Dárselo a alguien es dejarlo leer lo que el conductor dijo bajo promesa de confidencialidad, y las observaciones de las entrevistas del resto del personal.
 - **Excepción 2:** *Administrador* es un permiso de lectura. Habilita Auditoría y Usuarios, y **no** habilita cargar datos: administrar y operar se mantienen separados a propósito.
 - **Excepción 3:** *Postulantes* es el otro permiso de lectura. Sin él, la pestaña Postulantes ni aparece. Sólo deja ver, buscar y descargar: para cargar, editar, anular o importar hace falta además *Postulantes: cargar y editar*, que incluye el de ver (si tildás sólo ése, se guarda con los dos). Ser administrador **no** incluye ninguno: si un admin lo necesita, se lo tilda como a cualquier otro usuario, y ese cambio queda en la Auditoría.
 
