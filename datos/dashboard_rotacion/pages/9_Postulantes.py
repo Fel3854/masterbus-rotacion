@@ -392,6 +392,27 @@ def _guardar(modificadas: pd.DataFrame):
     return resultado
 
 
+def _guardar_una(numero: int, modificadas: pd.DataFrame, hecho: str) -> None:
+    """Guarda la edición de una entrevista, la anota en la auditoría y vuelve a dibujar.
+
+    Si falló no vuelve a dibujar: el aviso queda a la vista para reintentar.
+    """
+    resultado = _guardar(modificadas)
+    if resultado is None:
+        return
+    if resultado["guardadas"]:
+        # Qué campos, nunca con qué valor.
+        nombres = ", ".join(pt.ENCABEZADO[c] for c in resultado["por_campo"])
+        auditoria.registrar(
+            "postulantes", "cambio",
+            f"Editó la entrevista Nº {numero} — {nombres}",
+            registro_id=numero,
+            datos={"campos": list(resultado["por_campo"])})
+    _avisar(hecho if resultado["guardadas"] else "",
+            _texto_conflictos(resultado["conflictos"]))
+    st.rerun()
+
+
 def _anular(numero: int, anulada: bool) -> None:
     """Anula o restaura una entrevista y vuelve a dibujar."""
     try:
@@ -441,20 +462,7 @@ def _render_edicion(df: pd.DataFrame, fila) -> None:
             elif not campos:
                 st.info("No cambiaste nada.")
             else:
-                resultado = _guardar(modificadas)
-                if resultado is not None:
-                    if resultado["guardadas"]:
-                        # Qué campos, nunca con qué valor.
-                        nombres = ", ".join(pt.ENCABEZADO[c] for c in resultado["por_campo"])
-                        auditoria.registrar(
-                            "postulantes", "cambio",
-                            f"Editó la entrevista Nº {numero} — {nombres}",
-                            registro_id=numero,
-                            datos={"campos": list(resultado["por_campo"])})
-                    _avisar(f"Entrevista Nº {numero} actualizada."
-                            if resultado["guardadas"] else "",
-                            _texto_conflictos(resultado["conflictos"]))
-                    st.rerun()
+                _guardar_una(numero, modificadas, f"Entrevista Nº {numero} actualizada.")
 
         st.divider()
         pide_anular = f"pt_anular_{numero}"
@@ -476,6 +484,54 @@ def _render_edicion(df: pd.DataFrame, fila) -> None:
                        help="Para una entrevista cargada por error o duplicada."):
             st.session_state[pide_anular] = True
             st.rerun()
+
+
+# ─── «Apto» desde la lista ────────────────────────────────────
+def _soltar_celda() -> None:
+    """Suelta la celda elegida en la lista: con otra key la tabla arranca sin selección.
+
+    Es la única forma de deseleccionar desde el código. Sin esto la celda de
+    «Apto» seguiría elegida y el diálogo se volvería a abrir en cada rerun, aun
+    después de confirmar, cancelar o cerrarlo.
+    """
+    st.session_state["pt_tabla_seed"] = st.session_state.get("pt_tabla_seed", 0) + 1
+
+
+@st.dialog("Confirmar cambio", on_dismiss=_soltar_celda)
+def _confirmar_apto(df: pd.DataFrame, numero: int) -> None:
+    """Pide confirmar antes de tildar o destildar «Apto» con un clic en la lista."""
+    fila = df[df["numero_orden"] == numero].iloc[0]
+    nuevo = not bool(fila["apto"])
+    dni = "sin DNI" if pd.isna(fila["dni"]) else f"DNI {_miles(fila['dni'])}"
+    datos = " · ".join([f"Nº {numero}", _fecha(fila["fecha"]), dni])
+    lugar = " · ".join(x for x in (fila["puesto"], fila["sector"]) if x)
+    st.markdown(
+        f'<div class="ficha">'
+        f'<div class="ficha-nombre">{_esc(fila["apenom"] or "(sin nombre)")}</div>'
+        f'<div class="ficha-meta">{_esc(datos)}<br>'
+        f'{_esc(lugar or "Sin puesto ni sector cargados")}</div></div>',
+        unsafe_allow_html=True)
+    st.write("")
+    rotulo = pt.ENCABEZADO["apto"]
+    if nuevo:
+        st.markdown(f"¿Tildar **{rotulo}** en esta entrevista?")
+    else:
+        st.markdown(f"¿Quitar el tilde de **{rotulo}**? Queda sin marcar, que no es "
+                    "lo mismo que rechazada.")
+
+    c1, c2 = st.columns(2)
+    if c1.button("Sí, marcar apto" if nuevo else "Sí, quitar el tilde", type="primary",
+                 key="pt_apto_si", width="stretch"):
+        editado = pd.DataFrame([{"numero_orden": numero,
+                                 **pt.canonizar_fila({**fila.to_dict(), "apto": nuevo})}])
+        modificadas = pt.plan_de_edicion(df[df["numero_orden"] == numero], editado)
+        _soltar_celda()
+        _guardar_una(numero, modificadas,
+                     f"Entrevista Nº {numero} marcada apta." if nuevo
+                     else f"Entrevista Nº {numero}: se quitó el tilde de «Apto».")
+    if c2.button("Cancelar", key="pt_apto_no", width="stretch"):
+        _soltar_celda()
+        st.rerun()
 
 
 # ─── Ficha de una entrevista ──────────────────────────────────
@@ -777,21 +833,39 @@ with tab_lista:
 
         # La selección se guarda por posición de fila: si cambia el recorte, la
         # posición vieja apuntaría a otra persona. La key atada al recorte la
-        # descarta sola.
+        # descarta sola. La semilla la cambia `_soltar_celda`.
         numeros = tuple(f["numero_orden"].tolist())
         vista = _tabla(f, con_observaciones=False)
+        config_lista = _config(vista)
+        if PUEDE_EDITAR:
+            config_lista["Apto"] = st.column_config.TextColumn(
+                width="small",
+                help="✓ = casilla tildada. Vacío = sin marcar, no rechazado. Hacé clic "
+                     "en la celda para cambiarla: antes de guardar pide confirmación.")
+        # Por celda y no por fila: un clic en «Apto» es para cambiarlo, uno en
+        # cualquier otra celda abre la ficha.
         evento = st.dataframe(
             vista, hide_index=True, width="stretch", height=430,
-            column_config=_config(vista),
-            on_select="rerun", selection_mode="single-row",
-            key=f"tabla_pt_{hash(numeros)}",
+            column_config=config_lista,
+            on_select="rerun", selection_mode="single-cell",
+            key=f"tabla_pt_{hash(numeros)}_{st.session_state.get('pt_tabla_seed', 0)}",
         )
         st.caption("Hacé clic en una fila para ver la ficha completa, con las "
-                   "observaciones, y el historial de esa persona. " + LEYENDA_APTO)
+                   "observaciones, y el historial de esa persona. "
+                   + ("Para tildar o destildar «Apto», hacé clic en esa celda: te "
+                      "pide confirmación antes de guardar. " if PUEDE_EDITAR else "")
+                   + LEYENDA_APTO)
 
-        filas_sel = list((evento or {}).get("selection", {}).get("rows", []))
-        if filas_sel and filas_sel[0] < len(f):
-            _render_ficha(df, int(f.iloc[filas_sel[0]]["numero_orden"]))
+        celdas = list((evento or {}).get("selection", {}).get("cells", []))
+        if celdas and celdas[0][0] < len(f):
+            fila_sel, columna_sel = celdas[0]
+            elegida = f.iloc[fila_sel]
+            # Una anulada no se toca desde acá: primero se restaura, desde su ficha.
+            if (columna_sel == "Apto" and PUEDE_EDITAR
+                    and not bool(elegida["anulada"])):
+                _confirmar_apto(df, int(elegida["numero_orden"]))
+            else:
+                _render_ficha(df, int(elegida["numero_orden"]))
 
         if st.download_button(
             "⬇  Descargar resultado (Excel)", data=_excel(numeros, VERSION),

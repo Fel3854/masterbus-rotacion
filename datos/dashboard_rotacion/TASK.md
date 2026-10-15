@@ -251,7 +251,7 @@ Importación (`leer_archivo` → `normalizar_archivo` → `plan_de_carga` → `u
   `POSTULANTES_MDB=… POSTULANTES_CSV=… python3 -m pytest tests/test_postulantes.py -k mdb`
   (compara el `.mdb` real contra su export de referencia; tiene que dar 0 diferencias).
 
-Tres cosas de la pantalla que no se ven leyendo una función suelta:
+Cuatro cosas de la pantalla que no se ven leyendo una función suelta:
 
 - **Lo que aparece y desaparece arriba de `st.tabs` va en contenedores fijos**
   (`zona_lectura`, `zona_avisos`). El spinner de `_leer()` sólo existe cuando no
@@ -262,6 +262,13 @@ Tres cosas de la pantalla que no se ven leyendo una función suelta:
   incluye los datos en su identidad: si cambian por debajo (el caché se renueva
   cada 10 minutos, o guarda otra persona) descarta lo editado, aunque tenga `key`.
   Por lo mismo su configuración no lleva nada que cambie con el día.
+- **La lista de Entrevistas selecciona por celda (`single-cell`), no por fila.**
+  Un clic en «Apto», con `edit_postulantes` y en una entrevista no anulada, abre
+  el diálogo `_confirmar_apto`, que guarda por `plan_de_edicion` →
+  `guardar_edicion` como la ficha; un clic en cualquier otra celda abre la ficha.
+  Confirmar, cancelar o cerrar el diálogo cambia `pt_tabla_seed`, que va en la key
+  de la tabla: es la única forma de soltar la celda desde el código, y sin eso el
+  diálogo se vuelve a abrir en cada rerun.
 - **`AppTest` no maneja `st.data_editor`, ni la selección de filas, ni el
   uploader, y tras un `st.rerun()` su árbol conserva los elementos de la corrida
   interrumpida.** Para probar la página se usa un arnés que reemplaza esos tres
