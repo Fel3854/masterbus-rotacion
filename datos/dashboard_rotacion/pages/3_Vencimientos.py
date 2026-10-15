@@ -28,16 +28,18 @@ st.markdown(f"""
 @import url('https://fonts.googleapis.com/css2?family=Fira+Sans:wght@300;400;500;600;700&family=Fira+Code:wght@400;500;600&display=swap');
 
 html, body, [class*="css"], p, span, div, label, td, th, li {{
-    font-family: 'Fira Sans', sans-serif !important;
     color: #333333;
+}}
+/* Fira Sans forzada sólo en el contenido de la página: la barra lateral queda
+   como en las demás vistas, y los íconos conservan su fuente (Streamlit los
+   escribe como texto, «keyboard_double_arrow_left», y con otra fuente se lee
+   el nombre en vez del dibujo). */
+html, body,
+[data-testid="stMain"] :is(p, span, div, label, td, th, li):not([data-testid="stIconMaterial"]) {{
+    font-family: 'Fira Sans', sans-serif !important;
 }}
 .stApp {{ background-color: #EDEDED !important; }}
 [data-testid="stElementToolbar"] {{ display: none; }}
-[data-testid="stSidebar"] {{ background-color: #1e1e2e !important; }}
-[data-testid="stSidebar"] * {{ color: #e0e0e0 !important; }}
-[data-testid="stSidebarNavLink"][aria-selected="true"] {{
-    background-color: rgba(237,93,59,0.25) !important;
-}}
 
 /* ── Header ── */
 .page-title {{
@@ -110,8 +112,8 @@ div[data-testid="stRadio"] label:has(input:checked) {{
     color: #fff !important;
 }}
 
-/* ── Botón ── */
-.stButton > button {{
+/* ── Botón (el de la barra lateral, «Cerrar sesión», queda como en las demás vistas) ── */
+[data-testid="stMain"] .stButton > button {{
     background: #fff;
     color: #333 !important;
     border: 1.5px solid #d0d0d0;
@@ -122,14 +124,14 @@ div[data-testid="stRadio"] label:has(input:checked) {{
     padding: 0.5rem 1.2rem;
     transition: all 0.2s;
 }}
-.stButton > button:hover {{
+[data-testid="stMain"] .stButton > button:hover {{
     background: {COLOR_PRIMARY} !important;
     color: #fff !important;
     border-color: {COLOR_PRIMARY} !important;
 }}
 
 /* ── Caption ── */
-[data-testid="stCaptionContainer"] p {{ color: #aaa !important; font-size: 0.78rem !important; }}
+[data-testid="stMain"] [data-testid="stCaptionContainer"] p {{ color: #aaa !important; font-size: 0.78rem !important; }}
 
 /* ── Dataframe ── */
 [data-testid="stDataFrame"] {{
