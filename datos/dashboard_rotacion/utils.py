@@ -223,7 +223,9 @@ def inyectar_css_base():
 
     .stApp {{ background-color: {COLOR_BG}; }}
 
-    .stButton > button {{
+    /* Botones del contenido; el de la barra lateral («Cerrar sesión») queda
+       igual en todas las vistas. */
+    [data-testid="stMain"] .stButton > button {{
         background: {COLOR_SURFACE};
         color: {COLOR_TEXT};
         border: 1.5px solid {COLOR_BORDER};
@@ -233,12 +235,12 @@ def inyectar_css_base():
         padding: 0.45rem 1.2rem;
         transition: all 0.18s ease;
     }}
-    .stButton > button:hover {{
+    [data-testid="stMain"] .stButton > button:hover {{
         background: {COLOR_PRIMARY};
         color: #fff;
         border-color: {COLOR_PRIMARY};
     }}
-    .stButton > button:active {{
+    [data-testid="stMain"] .stButton > button:active {{
         background: {COLOR_DANGER};
         border-color: {COLOR_DANGER};
         color: #fff;

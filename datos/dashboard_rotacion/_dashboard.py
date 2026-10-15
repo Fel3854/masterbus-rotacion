@@ -306,8 +306,8 @@ html, body, [class*="st-"], p, span, label, div, button, input, select {{
 }}
 [data-testid="stSidebarContent"] {{ padding-top: 1rem; }}
 
-/* Botones */
-.stButton > button {{
+/* Botones (sólo los del contenido: «Cerrar sesión» queda igual en todas las vistas) */
+[data-testid="stMain"] .stButton > button {{
     background-color: {COLOR_ACCENT} !important;
     color: #FFFFFF !important;
     border: 1px solid #474747 !important;
@@ -316,7 +316,7 @@ html, body, [class*="st-"], p, span, label, div, button, input, select {{
     font-weight: 600 !important;
     transition: background-color 0.15s ease !important;
 }}
-.stButton > button:hover {{
+[data-testid="stMain"] .stButton > button:hover {{
     background-color: {COLOR_PRIMARY} !important;
     border-color: {COLOR_PRIMARY} !important;
 }}
