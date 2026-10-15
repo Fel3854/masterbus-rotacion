@@ -253,8 +253,13 @@ st.markdown(f"""
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;500;600;700&family=Fira+Sans:wght@300;400;500;600;700&display=swap');
 
-/* Typography: Fira Sans general */
-html, body, [class*="st-"], p, span, label, div, button, input, select {{
+/* Typography: Fira Sans general. Los íconos quedan afuera: Streamlit los
+   escribe como texto («keyboard_double_arrow_left») y con otra fuente se lee
+   el nombre en vez del dibujo. El :where() no suma especificidad: para todo lo
+   demás la regla pesa lo mismo que antes. */
+html, body, p, label, div, button, input, select,
+[class*="st-"]:where(:not([data-testid="stIconMaterial"])),
+span:where(:not([data-testid="stIconMaterial"])) {{
     font-family: 'Fira Sans', sans-serif !important;
     font-size: 15px;
     color: {COLOR_TEXT};
