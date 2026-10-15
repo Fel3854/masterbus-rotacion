@@ -260,7 +260,7 @@ La búsqueda y los filtros se combinan, y valen tanto para la lista como para el
 
 Las entrevistas aparecen de la más nueva a la más vieja. La lista muestra el **Motivo**; las **Observaciones** se leen en la ficha (la búsqueda las encuentra igual). Para ver quiénes se presentaron más de una vez usá el filtro *Se presentó más de una vez*; la ficha de esas personas lo indica arriba, al lado del nombre.
 
-**Hacé clic en una fila** para abrir la ficha: el texto completo de los motivos y las observaciones, y debajo las **otras entrevistas de esa misma persona** (mismo DNI). Dos avisos a tener en cuenta:
+**Hacé clic en una fila** (en cualquier celda; si podés cargar, en cualquiera menos «Apto») para abrir la ficha: el texto completo de los motivos y las observaciones, y debajo las **otras entrevistas de esa misma persona** (mismo DNI). Dos avisos a tener en cuenta:
 
 - Si con ese DNI hay registros con **apellidos distintos**, la ficha lo advierte. Puede ser el mismo apellido mal tipeado o un DNI mal cargado: mirá los nombres antes de sacar conclusiones.
 - Si la entrevista **no tiene DNI**, no se puede armar el historial. Buscá por apellido.
@@ -307,6 +307,12 @@ Para tener en cuenta:
 Abrí su ficha (clic en la fila) y desplegá **Editar esta entrevista**. Cambiá lo que haga falta y **Guardar cambios**. Es el camino para lo de todos los días: agregar el resultado a las observaciones, completar un DNI, corregir un apellido.
 
 Se guarda **sólo lo que cambiaste**. Si mientras tenías la ficha abierta otra persona modificó ese mismo dato, el tuyo no lo pisa: la página te avisa y te muestra cómo quedó.
+
+### Tildar o destildar «Apto» desde la lista
+
+Para esto no hace falta abrir la ficha: **hacé clic en la celda «Apto»** de la fila. Se abre una ventana con el nombre, el Nº y la fecha de la entrevista, y te pregunta si querés tildarla (o quitarle el tilde, si ya lo tenía). Se guarda recién cuando tocás **Sí**; **Cancelar** o cerrar la ventana no cambia nada. Queda anotado en Auditoría, como cualquier otra corrección.
+
+Las entrevistas anuladas no se pueden cambiar así: primero hay que restaurarlas.
 
 ### Anular una entrevista cargada por error
 
