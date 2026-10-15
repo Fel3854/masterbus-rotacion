@@ -80,6 +80,10 @@ html, body, [class*="css"], p, span, div, label, td, th, li {{
     font-size: 2.4rem; font-weight: 700;
     line-height: 1; margin-bottom: 0.35rem;
 }}
+/* Gana a la Fira Sans forzada con !important sobre todos los div de arriba. */
+[data-testid="stMain"] .kpi-card .kpi-value {{
+    font-family: 'Fira Code', monospace !important;
+}}
 .kpi-desc {{
     font-size: 0.78rem; color: #888;
 }}
