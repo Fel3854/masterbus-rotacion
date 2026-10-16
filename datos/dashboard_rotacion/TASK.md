@@ -90,6 +90,7 @@ derecha, entrando como dueño de la app) → **⋮** → **Reboot app**.
 
 | Módulo | Descripción |
 |---|---|
+| Ausentismo | Días de ausencia por novedades de MasterBus (`/api/v1/auto`), apilados por tipo; filtros por sector, puesto, tipo y novedad. La ven todos |
 | Adelantos de Sueldo | Alta de adelantos + exportación Excel formato Santander |
 | Descuentos | Alta de descuentos con cuotas + exportación TXT para liquidación |
 | Vencimientos | Control de documentación y habilitaciones próximas a vencer |
@@ -326,8 +327,42 @@ Segundo cuestionario del ítem Seguimiento (2026-10): la «Encuesta de seguimien
 - **Orden de despliegue**: la migración es aditiva (una tabla nueva) y puede ir antes o después del código. Sin ella, Conductores funciona igual y el cuestionario nuevo avisa que no pudo cargar las entrevistas.
 - **Pendiente si se pide**: cola de pendientes y cobertura por mes de ingreso (conductores las tiene); falta definir a cuántos días del ingreso se toma esta encuesta.
 
+### Ausentismo
+
+`ausentismo.py` + `pages/10_Ausentismo.py` + `tests/test_ausentismo.py`.
+
+Días de ausencia según las novedades de MasterBus (2026-10). Fuente:
+`GET https://traficonuevo.masterbus.net/api/v1/auto`, sin credenciales como el
+padrón: ~321 mil novedades (~47 MB), cada una `{desde, hasta, novedad, apellido,
+nombre, legajo, id_empleado}`, con fechas ISO (el padrón usa `dd/mm/yyyy`).
+
+- **Qué cuenta**: todo menos `NOVEDADES_EXCLUIDAS` (francos, feriados, días
+  trabajados y ajustes o compensaciones del diagrama), que son dos de cada tres
+  registros. Lo que cuenta se agrupa en seis grupos (`TIPO_A_GRUPO`) para que el
+  gráfico se lea; un tipo nuevo cuenta igual, en «Otras», hasta clasificarlo. Un
+  test fija los 33 tipos de ausencia y los 12 excluidos que había al 15/10/2026.
+- **Días corridos**: cada novedad suma los días de su rango que caen en el
+  período, sin descontar francos o feriados del medio (~12 % de los días de
+  ausencia coincide con uno). Un día con dos tipos distintos cuenta en los dos
+  (<1 %). Se recorta a [01/01/2014, hoy]: antes la carga es parcial y hay fechas
+  basura; lo futuro (vacaciones programadas) cuenta cuando pasa.
+- **Cruce por `id_empleado`, no por legajo**: el legajo se repite entre empresas
+  (208 casos en el padrón del grupo). Sector = `str`, puesto = `cargo` con
+  CONDUCTOR → CONDUCTORES (la regla de Seguimiento). Son los de hoy: la API no
+  guarda historial. Queda afuera quien no está en `cargar_datos()` (~4,5 % de
+  los días), y la página lo informa.
+- **Memoria**: parseada entera, la respuesta pasa los 400 MB y tira la app en
+  Streamlit Cloud. `parsear_novedades()` descarta al parsear lo excluido y los
+  nombres (pico medido: ~190 MB), y el caché de la página (`_cargar`, 1 h,
+  `max_entries=1`) guarda directo los días-persona.
+- **Colores**: uno fijo por grupo, validado para daltonismo con la skill de
+  dataviz; el orden de la pila es el de `GRUPOS`. Tres quedan bajo 3:1 de
+  contraste: por eso la tabla «Ver los datos del gráfico».
+- La ven todos los usuarios logueados: no hay permiso ni migración.
+
 ## Parámetros / Variables de entorno
-La URL de la API está embebida en el código (`API_URL` en `utils.py` y `_dashboard.py`).
+Las URLs de la API están embebidas en el código (`API_URL` en `utils.py` y `_dashboard.py`;
+`API_NOVEDADES_URL` en `ausentismo.py`).
 Los módulos que escriben en base (Adelantos, Descuentos, Seguimiento) necesitan
 `SUPABASE_URL` y `SUPABASE_KEY` en `.streamlit/secrets.toml`, junto con la tabla
 `[passwords]` del login.

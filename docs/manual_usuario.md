@@ -1,6 +1,6 @@
 # Manual de Usuario: Plataforma de RRHH - Grupo Master
 
-Este manual está diseñado para explicarte paso a paso cómo utilizar el **Dashboard de Rotación y Gestión de Novedades (Adelantos, Descuentos, Vencimientos y Seguimiento del personal ingresante)**. La herramienta está pensada para el uso intensivo (*heavy user*) del departamento de Recursos Humanos, centralizando la información en un solo lugar.
+Este manual está diseñado para explicarte paso a paso cómo utilizar el **Dashboard de Rotación, Ausentismo y Gestión de Novedades (Adelantos, Descuentos, Vencimientos y Seguimiento del personal ingresante)**. La herramienta está pensada para el uso intensivo (*heavy user*) del departamento de Recursos Humanos, centralizando la información en un solo lugar.
 
 ---
 
@@ -9,13 +9,14 @@ Este manual está diseñado para explicarte paso a paso cómo utilizar el **Dash
 Para acceder a la plataforma, debes ingresar a la URL que se te ha proporcionado (por ejemplo, mediante el enlace de Streamlit Cloud o la URL interna). 
 Al ingresar, verás un menú lateral (a la izquierda) que te permitirá navegar entre los distintos módulos:
 1. **Dashboard** (Rotación de Personal)
-2. **Adelantos de Sueldo**
-3. **Descuentos**
-4. **Vencimientos**
-5. **Seguimiento** (entrevistas al personal ingresante: conductores y resto del personal)
-6. **Minutas Reunión** (temas y acciones de RRHH)
-7. **Postulantes** (registro de entrevistas a postulantes; sólo visible para quien tiene el permiso)
-8. **Auditoría** y **Usuarios** (sólo visibles para el administrador)
+2. **Ausentismo** (días de ausencia por tipo, sector y puesto)
+3. **Adelantos de Sueldo**
+4. **Descuentos**
+5. **Vencimientos**
+6. **Seguimiento** (entrevistas al personal ingresante: conductores y resto del personal)
+7. **Minutas Reunión** (temas y acciones de RRHH)
+8. **Postulantes** (registro de entrevistas a postulantes; sólo visible para quien tiene el permiso)
+9. **Auditoría** y **Usuarios** (sólo visibles para el administrador)
 
 ---
 
@@ -45,7 +46,44 @@ En la parte inferior cuentas con pestañas para ver los gráficos de **Evolució
 
 ---
 
-## 3. Flujo de Trabajo 2: Adelantos de Sueldo y Descuentos
+## 3. Ausentismo
+
+Esta pestaña muestra **cuántos días faltó el personal del Grupo Master y por qué**, según las novedades que se cargan en el diagrama de MasterBus. La pregunta que mejor responde es: *¿cómo viene el ausentismo, y de qué está hecho?* Los datos se actualizan solos cada hora y la pestaña la ven todos los usuarios.
+
+### Qué cuenta como ausentismo
+
+Toda novedad que hace faltar al trabajo: enfermedad y salud, accidentes, ausencias (con o sin aviso, justificadas o no, jornadas incompletas), suspensiones, licencias y vacaciones.
+
+**No cuentan** los francos ni los feriados (ese día no tocaba trabajar), los francos o feriados trabajados (la persona fue) ni los ajustes del diagrama (adeuda, devuelve o compensa día, día flex, ajuste de francos). La lista completa está en el desplegable *¿Qué cuenta como ausentismo?*, al pie de la pantalla.
+
+Los días se cuentan **corridos**: una licencia del 1 al 10 son 10 días, aunque en el medio caiga un franco.
+
+### Filtros
+
+Están todos arriba, en una sola fila, y valen para los indicadores, el gráfico y las tablas:
+
+- **Desde / Hasta**: el rango a mirar. Arranca en los últimos 12 meses; se puede ir hasta enero de 2014.
+- **Sector / Operación** y **Puesto**: vacíos, incluyen a todos. «Conductores» junta a quienes figuran como CONDUCTOR y como CONDUCTORES.
+- **Tipo de ausencia**: los seis grupos del gráfico, todos marcados. Sacá **Vacaciones** para ver sólo el ausentismo no planificado.
+- **Novedad**: para quedarte con un tipo puntual dentro de esos grupos, por ejemplo *Ausencia injustificada*.
+- **Agrupar por**: mes, semana o día. Día por día, sólo con hasta un año de rango; con más, se agrupa por semana y la pantalla lo avisa.
+
+### Indicadores, gráfico y tablas
+
+- **Días de ausencia**, **Personas con ausencias** (al menos un día en el rango) y **Días por persona** (promedio entre quienes faltaron).
+- El gráfico apila los días de cada tipo en cada período y marca el total con una línea. Pasando el mouse por un período ves el detalle. **Las barras más claras son períodos incompletos** (el mes en curso, o uno que el rango corta por la mitad): no los compares de igual a igual con el resto.
+- *Ver los datos del gráfico* muestra los mismos números en una tabla.
+- *Detalle por novedad* desglosa cada tipo con sus días, sus personas y su parte del total.
+
+### Para tener en cuenta
+
+- **Sector y puesto son los de hoy.** Si alguien cambió de puesto, sus ausencias anteriores aparecen con el puesto actual: MasterBus no guarda el historial.
+- **Sólo cuenta quien está en el padrón del Grupo Master.** Al pie de la pantalla se informa cuántas novedades quedan afuera por ser de personas que no figuran.
+- Si un mismo día tiene dos novedades distintas (por ejemplo, *Enfermedad* y *Constancia de Atención Médica*), cuenta en las dos.
+
+---
+
+## 4. Flujo de Trabajo 2: Adelantos de Sueldo y Descuentos
 
 Los módulos de **Adelantos** y **Descuentos** funcionan de manera idéntica. Su objetivo es registrar novedades económicas del personal activo para luego exportarlas al sistema de liquidación de sueldos.
 
@@ -75,7 +113,7 @@ Si cargaste un monto mal o te equivocaste de empleado:
 
 ---
 
-## 4. Flujo de Trabajo 3: Vencimientos
+## 5. Flujo de Trabajo 3: Vencimientos
 
 *(Nota: Este módulo gestiona las fechas límite)*
 
@@ -85,7 +123,7 @@ Esta pantalla te muestra listados de personal o recursos que tienen documentaci�
 
 ---
 
-## 5. Flujo de Trabajo 4: Seguimiento
+## 6. Flujo de Trabajo 4: Seguimiento
 
 Debajo del título hay un selector con **dos cuestionarios**:
 
@@ -224,7 +262,7 @@ Las preguntas 5 (si algo le resultó difícil) y 14 (si la empresa podría mejor
 
 ---
 
-## 6. Postulantes: registro de entrevistas
+## 7. Postulantes: registro de entrevistas
 
 Esta pestaña es el **registro de entrevistas a postulantes (FORM 045 02)**: todas las personas entrevistadas desde 2007, con el puesto, el sector y lo que anotó quien las entrevistó. La pregunta que mejor responde es: *¿esta persona ya se presentó antes, y qué pasó esa vez?*
 
@@ -351,7 +389,7 @@ Para tener en cuenta:
 
 ---
 
-## 7. Auditoría: quién hizo qué
+## 8. Auditoría: quién hizo qué
 
 Todo movimiento que cambia datos queda registrado. La pestaña **Auditoría** muestra ese registro y sólo la ve el **administrador**.
 
@@ -380,7 +418,7 @@ La tabla acepta que se agreguen movimientos y que se lean, pero **no** que se ed
 
 ---
 
-## 8. Usuarios: altas, permisos y contraseñas
+## 9. Usuarios: altas, permisos y contraseñas
 
 La pestaña **Usuarios** es del administrador. Desde ahí se da de alta a alguien nuevo, se le cambian los permisos o se le resetea la contraseña, sin tocar el código ni pedirle nada a nadie.
 
