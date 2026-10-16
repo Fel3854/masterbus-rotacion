@@ -351,10 +351,12 @@ nombre, legajo, id_empleado}`, con fechas ISO (el padrón usa `dd/mm/yyyy`).
   CONDUCTOR → CONDUCTORES (la regla de Seguimiento). Son los de hoy: la API no
   guarda historial. Queda afuera quien no está en `cargar_datos()` (~4,5 % de
   los días), y la página lo informa.
-- **Memoria**: parseada entera, la respuesta pasa los 400 MB y tira la app en
-  Streamlit Cloud. `parsear_novedades()` descarta al parsear lo excluido y los
-  nombres (pico medido: ~190 MB), y el caché de la página (`_cargar`, 1 h,
-  `max_entries=1`) guarda directo los días-persona.
+- **Memoria**: parseada entera, la respuesta le suma ~430 MB al proceso, encima
+  de lo que ya usa la app. `parsear_novedades()` descarta al parsear lo excluido
+  y los nombres: suma ~150 MB, una vez por hora (medido contra la API el
+  2026-10-16). El caché de la página (`_cargar`, 1 h, `max_entries=1`) guarda
+  directo los días-persona (~3 MB). Si un día no alcanza, el paso siguiente es
+  pedirle a MasterBus que la API filtre por fecha o por tipo.
 - **Colores**: uno fijo por grupo, validado para daltonismo con la skill de
   dataviz; el orden de la pila es el de `GRUPOS`. Tres quedan bajo 3:1 de
   contraste: por eso la tabla «Ver los datos del gráfico».

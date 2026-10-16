@@ -136,7 +136,8 @@ with f4:
                              key="aus_puesto", placeholder="Todos los puestos",
                              format_func=str.title)
 
-f5, f6, f7 = st.columns(3)
+# Más ancha: los seis tipos marcados entran en dos renglones y no en cuatro.
+f5, f6, f7 = st.columns([3, 2, 2])
 with f5:
     grupos = st.multiselect("Tipo de ausencia", grupos_presentes, default=grupos_presentes,
                             key="aus_grupo", placeholder="Todos los tipos")
@@ -210,8 +211,10 @@ fig.update_layout(**chart_base(
     legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="left", x=0),
 ))
 fig.update_xaxes(type="category")
-fig.update_yaxes(title_text="Días de ausencia")
-st.plotly_chart(fig, use_container_width=True)
+fig.update_yaxes(title_text="Días de ausencia", separatethousands=True)
+# Sin la barra de herramientas de Plotly, como en Postulantes: tapaba la leyenda.
+# Los números se bajan desde «Ver los datos del gráfico».
+st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
 if any(cortados):
     st.caption("Las barras más claras son períodos que el rango elegido deja por la mitad "
                "(por ejemplo, el mes en curso): no se comparan de igual a igual con el resto.")
@@ -219,20 +222,25 @@ if any(cortados):
 with st.expander("Ver los datos del gráfico"):
     datos = tabla.copy()
     datos.index = pd.Index(etiquetas, name="Período")
-    st.dataframe(datos, use_container_width=True)
+    st.dataframe(datos, use_container_width=True, column_config={
+        c: st.column_config.NumberColumn(c, format="localized") for c in datos.columns})
 
 
 # ─── Detalle por novedad ──────────────────────────────────────
 st.markdown('<div class="section-header"><div class="bar"></div>'
             '<span>Detalle por novedad</span></div>', unsafe_allow_html=True)
+resumen = aus.resumen_por_tipo(dias)
+# «localized» y «percent» los formatea el navegador según el idioma de quien mira
+# (11.243 y 47,4 % en uno en castellano), y las columnas se siguen ordenando
+# como números.
 st.dataframe(
-    aus.resumen_por_tipo(dias), hide_index=True, use_container_width=True,
+    resumen.assign(pct=resumen["pct"] / 100), hide_index=True, use_container_width=True,
     column_config={
         "grupo": "Tipo de ausencia",
         "novedad": "Novedad",
-        "dias": st.column_config.NumberColumn("Días", format="%d"),
-        "personas": st.column_config.NumberColumn("Personas", format="%d"),
-        "pct": st.column_config.NumberColumn("% de los días", format="%.1f%%"),
+        "dias": st.column_config.NumberColumn("Días", format="localized"),
+        "personas": st.column_config.NumberColumn("Personas", format="localized"),
+        "pct": st.column_config.NumberColumn("% de los días", format="percent"),
     })
 
 with st.expander("¿Qué cuenta como ausentismo?"):

@@ -84,9 +84,9 @@ def normalizar_puesto(cargo) -> str:
 def parsear_novedades(contenido) -> list:
     """Lee la respuesta de la API quedándose sólo con lo que se usa.
 
-    Son ~47 MB y 320 mil novedades: leídas enteras como diccionarios pasan los
-    400 MB de memoria, y en Streamlit Cloud eso tira la app. Por eso al parsear
-    se descarta lo que no es ausentismo (dos de cada tres son francos) y los
+    Son ~47 MB y 320 mil novedades: leídas enteras como diccionarios le suman
+    unos 430 MB a la memoria de la app (así, unos 150). Por eso al parsear se
+    descarta lo que no es ausentismo (dos de cada tres son francos) y los
     nombres; cada novedad queda como `(id_empleado, legajo, novedad, desde,
     hasta)`, y los textos repetidos (fechas, tipos) se guardan una sola vez.
     """
