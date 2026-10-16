@@ -183,8 +183,10 @@ def test_descarta_fechas_invalidas_e_invertidas():
 
 
 def test_descarta_registros_sin_persona_o_sin_novedad():
-    assert _norm(("", "10", "Enfermedad", "2024-01-08", "2024-01-09"),
-                 ("2", "20", "", "2024-01-08", "2024-01-09")).empty
+    df = _norm(("1", "10", "Enfermedad", "2024-01-08", "2024-01-09"),
+               ("", "10", "Enfermedad", "2024-01-08", "2024-01-09"),
+               ("2", "20", "", "2024-01-08", "2024-01-09"))
+    assert list(df["id_empleado"]) == ["1"]
 
 
 def test_un_registro_repetido_cuenta_una_vez():
@@ -596,3 +598,23 @@ def test_si_la_api_no_responde_muestra_un_error(monkeypatch):
     at = _pagina(monkeypatch, falla=True)
     assert not at.exception
     assert len(at.error) == 1
+
+
+# ─── Cambios de formato en la API ─────────────────────────────
+
+def test_si_ninguna_novedad_es_valida_es_un_error_y_no_un_cero():
+    # Si MasterBus cambia el formato de las fechas o el nombre de un campo, todo
+    # quedaría descartado y la página diría «no hay ausencias», que es falso.
+    with pytest.raises(ValueError):
+        _norm(("1", "10", "Enfermedad", "08/01/2024", "09/01/2024"),
+              ("2", "20", "Vacaciones", "01/02/2024", "14/02/2024"))
+
+
+def test_sin_novedades_no_es_un_error():
+    assert _norm().empty
+
+
+def test_si_la_api_cambia_el_formato_la_pagina_lo_dice_en_vez_de_mostrar_cero(monkeypatch):
+    at = _pagina(monkeypatch, novedades=[("1", "10", "Enfermedad", "10/01/2024", "11/01/2024")])
+    assert not at.exception
+    assert len(at.error) == 1 and "formato" in at.error[0].value

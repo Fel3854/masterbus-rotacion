@@ -123,12 +123,18 @@ def normalizar_novedades(registros, hoy: date) -> pd.DataFrame:
     Quedan afuera las fechas inválidas o invertidas, los registros sin persona
     o sin tipo y los duplicados exactos. Lo que todavía no pasó (vacaciones
     programadas) no cuenta hasta que pase.
+
+    Si llegan novedades pero ninguna es válida, lanza ValueError: es que cambió
+    el formato de la API, y mostrar «no hay ausencias» sería mentir.
     """
     df = pd.DataFrame.from_records(registros, columns=COLUMNAS)
     for col in ("desde", "hasta"):
         df[col] = pd.to_datetime(df[col], format="%Y-%m-%d", errors="coerce")
     validas = ((df["id_empleado"] != "") & (df["novedad"] != "")
                & df["desde"].notna() & df["hasta"].notna() & (df["desde"] <= df["hasta"]))
+    if len(df) and not validas.any():
+        raise ValueError("Ninguna novedad llegó con persona, tipo y fechas válidas: "
+                         "¿cambió el formato de la API?")
     df = df[validas].drop_duplicates().copy()
     df["desde"] = df["desde"].clip(lower=pd.Timestamp(FECHA_MINIMA))
     df["hasta"] = df["hasta"].clip(upper=pd.Timestamp(hoy))

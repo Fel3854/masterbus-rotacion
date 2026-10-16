@@ -107,6 +107,12 @@ def _cargar(hoy: date) -> tuple:
 
 try:
     DIAS, AFUERA, CARGADO = _cargar(HOY)
+except ValueError:
+    # Llegó algo, pero no con la forma de siempre: reintentar no lo arregla.
+    st.error("Las novedades llegaron de MasterBus con un formato que esta página no "
+             "reconoce, así que no se puede mostrar el ausentismo. Avisale a quien "
+             "mantiene el dashboard.")
+    st.stop()
 except Exception:  # noqa: BLE001 — sin las novedades o sin el padrón no hay nada que mostrar
     st.error("No se pudieron traer las novedades desde la API de MasterBus. "
              "Verificá tu conexión e intentá de nuevo.")
