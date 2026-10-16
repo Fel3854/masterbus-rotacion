@@ -54,7 +54,7 @@ Esta pestaña muestra **cuántos días faltó el personal del Grupo Master y por
 
 Toda novedad que hace faltar al trabajo: enfermedad y salud, accidentes, ausencias (con o sin aviso, justificadas o no, jornadas incompletas), suspensiones, licencias y vacaciones.
 
-**No cuentan** los francos ni los feriados (ese día no tocaba trabajar), los francos o feriados trabajados (la persona fue) ni los ajustes del diagrama (adeuda, devuelve o compensa día, día flex, ajuste de francos). La lista completa está en el desplegable *¿Qué cuenta como ausentismo?*, al pie de la pantalla.
+**No cuentan** los francos ni los feriados (ese día no tocaba trabajar), los francos o feriados trabajados (la persona fue), los ajustes del diagrama (adeuda, devuelve o compensa día, día flex, ajuste de francos) ni el **permiso gremial**: los delegados con permiso de tiempo completo suman el año entero y taparían el ausentismo del resto. La lista completa está en el desplegable *¿Qué cuenta como ausentismo?*, al pie de la pantalla.
 
 Los días se cuentan **corridos**: una licencia del 1 al 10 son 10 días, aunque en el medio caiga un franco.
 

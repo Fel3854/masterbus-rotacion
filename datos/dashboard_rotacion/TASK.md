@@ -338,9 +338,12 @@ nombre, legajo, id_empleado}`, con fechas ISO (el padrón usa `dd/mm/yyyy`).
 
 - **Qué cuenta**: todo menos `NOVEDADES_EXCLUIDAS` (francos, feriados, días
   trabajados y ajustes o compensaciones del diagrama), que son dos de cada tres
-  registros. Lo que cuenta se agrupa en seis grupos (`TIPO_A_GRUPO`) para que el
-  gráfico se lea; un tipo nuevo cuenta igual, en «Otras», hasta clasificarlo. Un
-  test fija los 33 tipos de ausencia y los 12 excluidos que había al 15/10/2026.
+  registros. Tampoco el Permiso Gremial: los delegados con permiso de tiempo
+  completo suman el año entero y distorsionaban la métrica operativa (decidido
+  por Feli el 2026-10-16). Lo que cuenta se agrupa en seis grupos
+  (`TIPO_A_GRUPO`) para que el gráfico se lea; un tipo nuevo cuenta igual, en
+  «Otras», hasta clasificarlo. Un test fija los 32 tipos de ausencia y los 13
+  excluidos que había al 16/10/2026.
 - **Días corridos**: cada novedad suma los días de su rango que caen en el
   período, sin descontar francos o feriados del medio (~12 % de los días de
   ausencia coincide con uno). Un día con dos tipos distintos cuenta en los dos
@@ -349,7 +352,7 @@ nombre, legajo, id_empleado}`, con fechas ISO (el padrón usa `dd/mm/yyyy`).
 - **Cruce por `id_empleado`, no por legajo**: el legajo se repite entre empresas
   (208 casos en el padrón del grupo). Sector = `str`, puesto = `cargo` con
   CONDUCTOR → CONDUCTORES (la regla de Seguimiento). Son los de hoy: la API no
-  guarda historial. Queda afuera quien no está en `cargar_datos()` (~4,5 % de
+  guarda historial. Queda afuera quien no está en `cargar_datos()` (~5 % de
   los días), y la página lo informa.
 - **Memoria**: parseada entera, la respuesta le suma ~430 MB al proceso, encima
   de lo que ya usa la app. `parsear_novedades()` descarta al parsear lo excluido

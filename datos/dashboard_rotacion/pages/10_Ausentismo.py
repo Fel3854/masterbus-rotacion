@@ -258,8 +258,9 @@ with st.expander("¿Qué cuenta como ausentismo?"):
         "desde–hasta suma todos sus días, aunque en el medio caiga un franco o un feriado. "
         "Si un mismo día tiene dos novedades distintas, cuenta en las dos.\n\n"
         f"{por_grupo}\n\n"
-        "**No cuentan** (no tocaba trabajar, se trabajó o es un ajuste del diagrama): "
-        + ", ".join(sorted(aus.NOVEDADES_EXCLUIDAS)) + ".\n\n"
+        "**No cuentan** los días que no tocaba trabajar, los que se trabajaron, los ajustes "
+        "del diagrama y el permiso gremial (los delegados de tiempo completo sumarían el año "
+        "entero): " + ", ".join(sorted(aus.NOVEDADES_EXCLUIDAS)) + ".\n\n"
         f"Un tipo nuevo que aparezca en MasterBus cuenta en **{aus.GRUPO_OTRAS}** hasta que se "
         f"lo clasifique. Se cuenta desde el {aus.FECHA_MINIMA:%d/%m/%Y}: antes, la carga en "
         "MasterBus es parcial.")

@@ -20,16 +20,17 @@ import utils  # noqa: E402
 
 HOY = date(2026, 10, 15)
 
-# Relevados de la API real el 15/10/2026.
+# Relevados de la API real el 15/10/2026. El Permiso Gremial no cuenta por decisión de
+# Feli (2026-10-16): los delegados con permiso de tiempo completo suman el año entero.
 NO_SON_AUSENCIA = [
     "Franco", "Feriado", "FRANCO/FERIADO", "Franco trabajado", "Feriado trabajado",
     "Franco compensatorio", "Adeuda Dia", "Devuelve Dia", "Compensa dia",
-    "AJUSTE FRANCOS", "DIA FLEX", "Control de ausentismo",
+    "AJUSTE FRANCOS", "DIA FLEX", "Control de ausentismo", "Permiso Gremial",
 ]
 SON_AUSENCIA = [
     "Vacaciones", "Enfermedad", "Ausencia injustificada", "Jornada Incompleta",
     "Suspension", "Ausencia con aviso", "Constancia de Atencion Medica",
-    "Accidente Laboral", "CUARENTENA", "Licencia por Fallecimiento", "Permiso Gremial",
+    "Accidente Laboral", "CUARENTENA", "Licencia por Fallecimiento",
     "LICENCIA COVID", "SUSPENSION X REGISTRO", "Licencia por Examen",
     "LICENCIA VACUNACION", "Licencia por Maternidad", "Licencia Especial",
     "Ausencia sin aviso", "Licencia Judicial", "Renovacion Examen Periodico",
@@ -146,7 +147,7 @@ def test_cada_tipo_de_ausencia_conocido_tiene_su_grupo():
     ("Ausencia injustificada", "Ausencias"),
     ("Jornada Incompleta", "Ausencias"),
     ("SUSPENSION X REGISTRO", "Suspensiones"),
-    ("Permiso Gremial", "Licencias"),
+    ("Licencia por Maternidad", "Licencias"),
     ("Asistencia a curso", "Licencias"),
     ("Vacaciones", "Vacaciones"),
     ("Algo que la API agregue mañana", "Otras"),

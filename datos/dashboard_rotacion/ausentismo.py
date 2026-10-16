@@ -22,16 +22,19 @@ FECHA_MINIMA = date(2014, 1, 1)
 SIN_DATO = "Sin dato"
 
 # Lo que no es ausentismo: días que no tocaba trabajar (francos, feriados), días
-# que sí se trabajaron, y ajustes o compensaciones de días del diagrama.
+# que sí se trabajaron, y ajustes o compensaciones de días del diagrama. El
+# Permiso Gremial tampoco: los delegados con permiso de tiempo completo suman el
+# año entero y distorsionan la métrica operativa (decidido por Feli, 2026-10-16).
 NOVEDADES_EXCLUIDAS = frozenset({
     "Franco", "Feriado", "FRANCO/FERIADO",
     "Franco trabajado", "Feriado trabajado",
     "Franco compensatorio", "Adeuda Dia", "Devuelve Dia", "Compensa dia",
     "AJUSTE FRANCOS", "DIA FLEX",
     "Control de ausentismo",
+    "Permiso Gremial",
 })
 
-# Todo lo demás cuenta. Para el gráfico se agrupa: 33 tipos no se pueden apilar
+# Todo lo demás cuenta. Para el gráfico se agrupa: 32 tipos no se pueden apilar
 # con colores que se distingan. El orden es el de la pila, de abajo hacia
 # arriba: lo no planificado primero, Vacaciones arriba de todo.
 _TIPOS_POR_GRUPO = {
@@ -46,9 +49,8 @@ _TIPOS_POR_GRUPO = {
     "Licencias": [
         "Licencia por Fallecimiento", "Licencia por Maternidad", "Licencia por Matrimonio",
         "Licencia por Examen", "Licencia Especial", "Licencia Judicial", "LICENCIA S/GOCE",
-        "Permiso Gremial", "Mudanza", "Periodo de Excendencia", "Donacion de sangre",
-        "LICENCIA POR REGISTRO", "Renovacion Registro", "Renovacion Examen Periodico",
-        "Asistencia a curso"],
+        "Mudanza", "Periodo de Excendencia", "Donacion de sangre", "LICENCIA POR REGISTRO",
+        "Renovacion Registro", "Renovacion Examen Periodico", "Asistencia a curso"],
     "Vacaciones": ["Vacaciones"],
 }
 GRUPOS = list(_TIPOS_POR_GRUPO)
