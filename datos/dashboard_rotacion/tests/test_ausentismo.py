@@ -1,16 +1,22 @@
-"""Tests de ausentismo.py — novedades de MasterBus → días de ausencia. Sin red."""
+"""Tests de ausentismo.py y de la página Ausentismo. Sin red: la API se simula."""
 
+import base64
 import json
 import os
+import re
 import sys
 from datetime import date
 
+import numpy as np
 import pandas as pd
 import pytest
 import requests
+import streamlit as st
+from streamlit.testing.v1 import AppTest
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import ausentismo as aus  # noqa: E402
+import utils  # noqa: E402
 
 HOY = date(2026, 10, 15)
 
@@ -414,3 +420,179 @@ def test_kpis():
 def test_kpis_sin_datos():
     vacio = aus.filtrar(_dos_tipos(), date(2030, 1, 1), date(2030, 1, 2))
     assert aus.kpis(vacio) == {"dias": 0, "personas": 0, "promedio": 0.0}
+
+
+# ─── Página (AppTest; la API se simula con respuestas reales de requests) ─────
+
+PAGINA = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+                      "pages", "10_Ausentismo.py")
+
+PADRON_PAGINA = [
+    ("1", "10", "PAZ LUIS", "MASTER BUS S.A", "CONDUCTOR", "Operacion Campana", "1"),
+    ("2", "20", "GOMEZ ANA", "MASTER BUS S.A", "MECANICO", "Operacion Campana", "1"),
+    ("3", "30", "SOSA EVA", "SINTRA", "CONDUCTORES", "Operacion Bragado", "1"),
+]
+NOVEDADES_PAGINA = [
+    ("1", "10", "Enfermedad", "2024-01-10", "2024-01-11"),              # conductor de Campana: 2 días
+    ("2", "20", "Vacaciones", "2024-01-15", "2024-01-19"),              # mecánica de Campana: 5 días
+    ("3", "30", "Ausencia injustificada", "2024-02-05", "2024-02-05"),  # conductora de Bragado: 1 día
+    ("3", "30", "Franco", "2024-02-06", "2024-02-06"),                  # no es ausentismo
+    ("9", "90", "Enfermedad", "2024-01-10", "2024-01-12"),              # no está en el padrón
+]
+
+
+def _json_padron(*filas):
+    """El padrón (/auto/e) con todos los campos que trae la API."""
+    return json.dumps([
+        {"activo": activo, "apenom": apenom, "banco": "", "cargo": cargo, "cbu": "",
+         "ciudad": "Zárate", "cuil": "", "domicilio": "", "email": "", "empleador": empleador,
+         "fechafin": "00/00/0000", "fechainicio": "01/01/2015", "fechanac": "01/01/1980",
+         "id_empleado": id_empleado, "legajo": legajo, "nrodoc": "", "str": sector,
+         "telefono": ""}
+        for id_empleado, legajo, apenom, empleador, cargo, sector, activo in filas
+    ]).encode()
+
+
+def _api(novedades, padron, falla):
+    def get(url, timeout):
+        if falla:
+            raise requests.ConnectionError("sin conexión")
+        if url == aus.API_NOVEDADES_URL:
+            return _respuesta(200, _json(*novedades))
+        if url == utils.API_URL:
+            return _respuesta(200, _json_padron(*padron))
+        raise AssertionError(f"pedido inesperado a {url}")
+    return get
+
+
+def _pagina(monkeypatch, novedades=NOVEDADES_PAGINA, padron=PADRON_PAGINA, falla=False):
+    """La página sobre la API simulada, con el rango en el primer trimestre de 2024."""
+    st.cache_data.clear()
+    monkeypatch.setattr(requests, "get", _api(novedades, padron, falla))
+    at = AppTest.from_file(PAGINA, default_timeout=30).run()
+    if not at.error:
+        at.date_input(key="aus_desde").set_value(date(2024, 1, 1))
+        at.date_input(key="aus_hasta").set_value(date(2024, 3, 31))
+        at.run()
+    return at
+
+
+def _kpi(at, etiqueta):
+    for md in at.markdown:
+        m = re.search(rf'kpi-label">{etiqueta}</div><div class="kpi-value">([^<]*)<', md.value)
+        if m:
+            return m.group(1)
+    raise AssertionError(f"no está el KPI «{etiqueta}»")
+
+
+def _figura(at):
+    graficos = at.get("plotly_chart")
+    assert len(graficos) == 1
+    return json.loads(graficos[0].proto.spec)
+
+
+def _valores(v):
+    """Plotly 6 manda los arrays de numpy en base64; las listas quedan como listas."""
+    if isinstance(v, dict) and "bdata" in v:
+        return np.frombuffer(base64.b64decode(v["bdata"]), dtype=np.dtype(v["dtype"])).tolist()
+    return list(v)
+
+
+def _barras(at):
+    return {t["name"]: _valores(t["y"]) for t in _figura(at)["data"] if t["type"] == "bar"}
+
+
+def _colores(at):
+    return {t["name"]: t["marker"]["color"] for t in _figura(at)["data"] if t["type"] == "bar"}
+
+
+def test_pagina_cuenta_las_ausencias_del_grupo_master_en_el_rango(monkeypatch):
+    at = _pagina(monkeypatch)
+    assert not at.exception
+    assert _kpi(at, "Días de ausencia") == "8"
+    assert _kpi(at, "Personas con ausencias") == "3"
+    assert _kpi(at, "Días por persona") == "2,7"
+    assert _barras(at) == {"Enfermedad y salud": [2, 0, 0], "Ausencias": [0, 1, 0],
+                           "Vacaciones": [5, 0, 0]}
+
+
+def test_las_barras_se_apilan_en_el_orden_de_la_definicion(monkeypatch):
+    barras = [t["name"] for t in _figura(_pagina(monkeypatch))["data"] if t["type"] == "bar"]
+    assert barras == ["Enfermedad y salud", "Ausencias", "Vacaciones"]
+
+
+def test_filtro_de_puesto_deja_solo_conductores(monkeypatch):
+    at = _pagina(monkeypatch)
+    at.multiselect(key="aus_puesto").set_value(["CONDUCTORES"]).run()
+    assert _kpi(at, "Personas con ausencias") == "2"
+    assert _barras(at) == {"Enfermedad y salud": [2, 0, 0], "Ausencias": [0, 1, 0]}
+
+
+def test_filtro_de_sector(monkeypatch):
+    at = _pagina(monkeypatch)
+    at.multiselect(key="aus_sector").set_value(["Operacion Bragado"]).run()
+    assert _barras(at) == {"Ausencias": [0, 1, 0]}
+
+
+def test_sacar_vacaciones_de_los_tipos(monkeypatch):
+    at = _pagina(monkeypatch)
+    at.multiselect(key="aus_grupo").set_value(["Enfermedad y salud", "Ausencias"]).run()
+    assert _kpi(at, "Días de ausencia") == "3"
+
+
+def test_filtrar_grupos_no_cambia_el_color_de_los_que_quedan(monkeypatch):
+    at = _pagina(monkeypatch)
+    antes = _colores(at)["Ausencias"]
+    at.multiselect(key="aus_grupo").set_value(["Ausencias"]).run()
+    assert _colores(at) == {"Ausencias": antes}
+
+
+def test_por_semana(monkeypatch):
+    at = _pagina(monkeypatch)
+    at.radio(key="aus_gran").set_value("Semanal").run()
+    assert len(_figura(at)["data"][0]["x"]) == 13   # del lunes 1/1 al domingo 31/3/2024
+    assert sum(sum(v) for v in _barras(at).values()) == 8
+
+
+def test_dia_por_dia_con_mas_de_un_anio_agrupa_por_semana_y_avisa(monkeypatch):
+    at = _pagina(monkeypatch)
+    at.date_input(key="aus_desde").set_value(date(2023, 1, 1))
+    at.radio(key="aus_gran").set_value("Diaria").run()
+    assert len(at.info) == 1
+    assert len(_figura(at)["data"][0]["x"]) == 66   # semanas del 26/12/2022 al 31/3/2024
+
+
+def test_una_novedad_elegida_cuyo_tipo_se_saca_no_rompe_la_pagina(monkeypatch):
+    at = _pagina(monkeypatch)
+    at.multiselect(key="aus_novedad").set_value(["Ausencia injustificada"]).run()
+    at.multiselect(key="aus_grupo").set_value(["Vacaciones"]).run()
+    assert not at.exception
+    assert at.multiselect(key="aus_novedad").value == []
+    assert _barras(at) == {"Vacaciones": [5, 0, 0]}
+
+
+def test_los_periodos_que_el_rango_corta_se_ven_mas_claros(monkeypatch):
+    at = _pagina(monkeypatch)
+    at.date_input(key="aus_desde").set_value(date(2024, 1, 15)).run()
+    opacidad = _valores(_figura(at)["data"][0]["marker"]["opacity"])
+    assert opacidad[0] < 1 and opacidad[1:] == [1, 1]
+
+
+def test_sin_ausencias_para_los_filtros_avisa_y_no_grafica(monkeypatch):
+    at = _pagina(monkeypatch)
+    at.multiselect(key="aus_sector").set_value(["Operacion Bragado"])
+    at.multiselect(key="aus_grupo").set_value(["Vacaciones"]).run()
+    assert not at.exception
+    assert any("No hay ausencias" in i.value for i in at.info)
+    assert at.get("plotly_chart") == []
+
+
+def test_avisa_lo_que_queda_fuera_del_padron(monkeypatch):
+    at = _pagina(monkeypatch)
+    assert any("1 novedad de 1 persona" in c.value for c in at.caption)
+
+
+def test_si_la_api_no_responde_muestra_un_error(monkeypatch):
+    at = _pagina(monkeypatch, falla=True)
+    assert not at.exception
+    assert len(at.error) == 1
