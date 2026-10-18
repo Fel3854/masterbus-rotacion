@@ -22,6 +22,7 @@ require_login()
 
 paginas = [
     st.Page("_dashboard.py",                        title="Dashboard",           icon="📊"),
+    st.Page("pages/10_Ausentismo.py",               title="Ausentismo",          icon="📆"),
     st.Page("pages/1_Adelantos_de_Sueldo.py",       title="Adelantos de Sueldo", icon="💵"),
     st.Page("pages/2_Descuentos.py",                title="Descuentos",          icon="📋"),
     st.Page("pages/3_Vencimientos.py",              title="Vencimientos",        icon="⏳"),
