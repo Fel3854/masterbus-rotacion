@@ -39,6 +39,9 @@ SON_AUSENCIA = [
     "Res. puesto trabajo", "LICENCIA POR REGISTRO", "Mudanza", "AUSENCIA JUSTIFICADA",
     "Accidente en itinerario", "Periodo de Excendencia",
 ]
+# Francos para el gráfico, decidido por Feli el 2026-10-20. No son ausentismo: se
+# muestran aparte, sobre la misma base. Feriados, días trabajados y ajustes no.
+SON_FRANCO = ["Franco", "Franco compensatorio", "FRANCO/FERIADO"]
 
 
 def _json(*registros):
@@ -63,11 +66,18 @@ def _norm(*registros, hoy=HOY):
 
 
 def _padron(*filas):
-    """Padrón como lo devuelve utils.cargar_datos() (columnas del cruce y vecinas)."""
+    """Padrón como lo devuelve utils.cargar_datos(): columnas del cruce, con las fechas parseadas.
+
+    Cada fila es `(id, legajo, apenom, empleador, cargo, sector, activo)` y, si hace
+    falta, ingreso y baja en dd/mm/aaaa: por defecto, desde 2015 y sin baja.
+    """
     columnas = ["id_empleado", "legajo", "apenom", "empleador", "cargo", "str",
                 "activo", "fechainicio", "fechafin"]
-    return pd.DataFrame([dict(zip(columnas, f + ("01/01/2015", "00/00/0000")))
-                         for f in filas])
+    df = pd.DataFrame([dict(zip(columnas, f + ("01/01/2015", "00/00/0000")[len(f) - 7:]))
+                       for f in filas])
+    df["fecha_inicio"] = df["fechainicio"].apply(utils._parse_fecha)
+    df["fecha_fin"] = df["fechafin"].apply(utils._parse_fecha)
+    return df
 
 
 def _padron_de(registros):
@@ -89,19 +99,27 @@ def _fechas(serie_de_fechas):
 
 # ─── Parseo de la API ─────────────────────────────────────────
 
-def test_parseo_deja_las_ausencias_sin_nombres():
-    crudo = _json(("1", "10", "Franco", "2024-01-06", "2024-01-06"),
+def test_parseo_deja_las_ausencias_y_los_francos_sin_nombres():
+    crudo = _json(("1", "10", "Feriado", "2024-01-01", "2024-01-01"),
+                  ("1", "10", "Franco", "2024-01-06", "2024-01-06"),
                   ("1", "10", "Enfermedad", "2024-01-08", "2024-01-09"),
                   ("2", "20", "Vacaciones", "2024-02-01", "2024-02-14"))
     assert aus.parsear_novedades(crudo) == [
+        ("1", "10", "Franco", "2024-01-06", "2024-01-06"),
         ("1", "10", "Enfermedad", "2024-01-08", "2024-01-09"),
         ("2", "20", "Vacaciones", "2024-02-01", "2024-02-14"),
     ]
 
 
-def test_parseo_descarta_cada_novedad_que_no_es_ausentismo():
-    crudo = _json(*[("1", "10", t, "2024-01-01", "2024-01-01") for t in NO_SON_AUSENCIA])
+def test_parseo_descarta_cada_novedad_que_no_es_ausentismo_ni_franco():
+    crudo = _json(*[("1", "10", t, "2024-01-01", "2024-01-01")
+                    for t in NO_SON_AUSENCIA if t not in SON_FRANCO])
     assert aus.parsear_novedades(crudo) == []
+
+
+def test_parseo_conserva_cada_tipo_de_franco():
+    crudo = _json(*[("1", "10", t, "2024-01-01", "2024-01-01") for t in SON_FRANCO])
+    assert [r[2] for r in aus.parsear_novedades(crudo)] == SON_FRANCO
 
 
 def test_parseo_limpia_espacios():
@@ -150,6 +168,9 @@ def test_cada_tipo_de_ausencia_conocido_tiene_su_grupo():
     ("Licencia por Maternidad", "Licencias"),
     ("Asistencia a curso", "Licencias"),
     ("Vacaciones", "Vacaciones"),
+    ("Franco", "Francos"),
+    ("Franco compensatorio", "Francos"),
+    ("FRANCO/FERIADO", "Francos"),
     ("Algo que la API agregue mañana", "Otras"),
 ])
 def test_grupo_de(novedad, grupo):
@@ -158,6 +179,11 @@ def test_grupo_de(novedad, grupo):
 
 def test_ninguna_novedad_excluida_tiene_grupo():
     assert set(aus.NOVEDADES_EXCLUIDAS) & set(aus.TIPO_A_GRUPO) == set()
+
+
+def test_los_tipos_de_franco_siguen_excluidos_del_ausentismo():
+    assert set(aus.NOVEDADES_FRANCO) == set(SON_FRANCO)
+    assert aus.NOVEDADES_FRANCO <= aus.NOVEDADES_EXCLUIDAS
 
 
 @pytest.mark.parametrize("cargo, puesto", [
@@ -239,6 +265,112 @@ def test_sector_vacio_queda_como_sin_dato():
     assert cruzado.iloc[0].sector == "Sin dato"
 
 
+def test_cada_novedad_se_recorta_al_periodo_de_empleo():
+    # Antes del ingreso o después de la baja la persona no es parte del trabajo
+    # posible: si contara, el porcentaje podría pasar del 100.
+    novedades = _norm(("1", "10", "Enfermedad", "2024-01-05", "2024-01-25"),
+                      ("1", "10", "Vacaciones", "2024-03-01", "2024-03-10"))   # después de la baja
+    padron = _padron(("1", "10", "PAZ LUIS", "MASTER BUS S.A", "MECANICO", "Operacion Sur", "0",
+                      "10/01/2024", "20/01/2024"))
+    cruzado, afuera = aus.cruzar_padron(novedades, padron)
+    rangos = [(r.novedad, r.desde.date(), r.hasta.date()) for r in cruzado.itertuples()]
+    assert rangos == [("Enfermedad", date(2024, 1, 10), date(2024, 1, 20))]
+    assert afuera == {"novedades": 0, "personas": 0}
+
+
+def test_el_cruce_no_agrega_columnas_de_fechas_del_padron():
+    cruzado, _ = aus.cruzar_padron(_norm(("1", "10", "Enfermedad", "2024-01-08", "2024-01-09")),
+                                   _padron_de([("1",)]))
+    assert list(cruzado.columns) == ["id_empleado", "legajo", "novedad", "desde", "hasta",
+                                     "grupo", "sector", "puesto", "empleador"]
+
+
+def test_un_inactivo_sin_fecha_de_baja_queda_afuera_como_en_la_dotacion():
+    # Misma regla que el Dashboard (_mask_fantasma): no se sabe hasta cuándo estuvo.
+    novedades = _norm(("1", "10", "Enfermedad", "2024-01-08", "2024-01-09"))
+    padron = _padron(("1", "10", "PAZ LUIS", "MASTER BUS S.A", "MECANICO", "Operacion Sur", "0"))
+    cruzado, afuera = aus.cruzar_padron(novedades, padron)
+    assert cruzado.empty
+    assert afuera == {"novedades": 1, "personas": 1}
+
+
+# ─── Personas y trabajo posible ───────────────────────────────
+
+def test_personas_del_padron_con_su_periodo_de_empleo():
+    padron = _padron(("1", "10", "A", "SINTRA", "CONDUCTOR", "Operacion Bragado", "1"),
+                     ("2", "20", "B", "MASTER BUS S.A", "MECANICO", "Operacion Campana", "0",
+                      "01/03/2020", "15/06/2024"),
+                     ("3", "30", "C", "MASTER BUS S.A", "MECANICO", "Operacion Campana", "0"))
+    p = aus.personas_del_padron(padron)
+    assert p.drop(columns="fin").to_dict("records") == [
+        {"id_empleado": "1", "sector": "Operacion Bragado", "puesto": "CONDUCTORES",
+         "empleador": "SINTRA", "inicio": pd.Timestamp("2015-01-01")},
+        {"id_empleado": "2", "sector": "Operacion Campana", "puesto": "MECANICO",
+         "empleador": "MASTER BUS S.A", "inicio": pd.Timestamp("2020-03-01")},
+    ]
+    assert [None if pd.isna(f) else f for f in p["fin"]] == [None, pd.Timestamp("2024-06-15")]
+
+
+def _personas_base():
+    """Un conductor de Campana todo el año, una mecánica que entra el 10/1 y se va el 5/2
+    y un conductor de Bragado que entra en 2025."""
+    return aus.personas_del_padron(_padron(
+        ("1", "10", "A", "MASTER BUS S.A", "CONDUCTOR", "Operacion Campana", "1"),
+        ("2", "20", "B", "MASTER BUS S.A", "MECANICO", "Operacion Campana", "0",
+         "10/01/2024", "05/02/2024"),
+        ("3", "30", "C", "SINTRA", "CONDUCTORES", "Operacion Bragado", "1", "01/01/2025")))
+
+
+def test_trabajo_posible_suma_los_dias_de_cada_persona_empleada():
+    posibles = aus.dias_posibles(_personas_base(), "Mensual", date(2024, 1, 1), date(2024, 3, 31))
+    assert _fechas(posibles.index) == [date(2024, 1, 1), date(2024, 2, 1), date(2024, 3, 1)]
+    assert posibles.tolist() == [31 + 22, 29 + 5, 31]
+
+
+def test_trabajo_posible_cuenta_solo_los_dias_del_rango():
+    posibles = aus.dias_posibles(_personas_base(), "Mensual", date(2024, 1, 15), date(2024, 2, 10))
+    assert posibles.tolist() == [17 + 17, 10 + 5]
+
+
+def test_trabajo_posible_respeta_sector_y_puesto():
+    personas = _personas_base()
+    rango = ("Mensual", date(2024, 1, 1), date(2024, 2, 29))
+    assert aus.dias_posibles(personas, *rango, puestos=["MECANICO"]).tolist() == [22, 5]
+    assert aus.dias_posibles(personas, *rango, sectores=["Operacion Campana"],
+                             puestos=["CONDUCTORES"]).tolist() == [31, 29]
+
+
+def test_trabajo_posible_en_cero_si_nadie_estaba_empleado():
+    personas = _personas_base()
+    assert aus.dias_posibles(personas, "Mensual", date(2024, 1, 1), date(2024, 2, 29),
+                             sectores=["Operacion Bragado"]).tolist() == [0, 0]
+    assert aus.dias_posibles(personas, "Mensual", date(2024, 1, 1), date(2024, 1, 31),
+                             sectores=["No existe"]).tolist() == [0]
+
+
+def test_trabajo_posible_por_semana_y_por_dia():
+    personas = _personas_base()
+    assert aus.dias_posibles(personas, "Semanal", date(2024, 1, 1), date(2024, 1, 14)).tolist() == [
+        7, 7 + 5]   # la mecánica entra el miércoles 10
+    assert aus.dias_posibles(personas, "Diaria", date(2024, 2, 4), date(2024, 2, 6)).tolist() == [
+        2, 2, 1]    # y se va el lunes 5
+
+
+def test_trabajo_posible_tiene_los_mismos_periodos_que_la_serie():
+    rango = ("Semanal", date(2024, 1, 3), date(2024, 2, 20))
+    assert aus.dias_posibles(_personas_base(), *rango).index.equals(
+        aus.serie(_tres_personas(), *rango).index)
+
+
+def test_porcentajes_sobre_el_trabajo_posible():
+    tabla = pd.DataFrame({"Vacaciones": [5, 0, 0], "Total": [5, 0, 0]})
+    posibles = pd.Series([200, 100, 0])
+    pct = aus.porcentajes(tabla, posibles)
+    assert pct["Vacaciones"].tolist()[:2] == [2.5, 0.0]
+    assert np.isnan(pct["Vacaciones"].iloc[2])   # sin nadie empleado no hay porcentaje
+    assert aus.porcentajes(tabla["Total"], posibles).tolist()[:2] == [2.5, 0.0]
+
+
 # ─── Expansión a días ─────────────────────────────────────────
 
 def test_un_rango_se_convierte_en_un_dia_por_fecha():
@@ -258,6 +390,24 @@ def test_un_dia_con_dos_tipos_distintos_cuenta_en_ambos():
     dias = _dias(("1", "10", "Enfermedad", "2024-01-01", "2024-01-01"),
                  ("1", "10", "Constancia de Atencion Medica", "2024-01-01", "2024-01-01"))
     assert sorted(dias["novedad"].astype(str)) == ["Constancia de Atencion Medica", "Enfermedad"]
+
+
+def test_los_francos_se_separan_de_las_ausencias():
+    novedades = _norm(("1", "10", "Franco", "2024-01-06", "2024-01-07"),
+                      ("1", "10", "Enfermedad", "2024-01-08", "2024-01-09"),
+                      ("1", "10", "Franco compensatorio", "2024-01-10", "2024-01-10"))
+    ausencias, francos = aus.separar_francos(novedades)
+    assert list(ausencias["novedad"]) == ["Enfermedad"]
+    assert list(francos["novedad"]) == ["Franco", "Franco compensatorio"]
+    assert set(francos["grupo"]) == {"Francos"}
+    assert list(francos.index) == [0, 1]
+
+
+def test_la_serie_de_francos_tiene_su_columna():
+    dias = _dias(("1", "10", "Franco", "2024-01-06", "2024-01-07"))
+    s = aus.serie(dias, "Mensual", date(2024, 1, 1), date(2024, 2, 29))
+    assert list(s.columns) == ["Francos", "Total"]
+    assert s["Total"].tolist() == [2, 0]
 
 
 def test_cada_dia_lleva_el_sector_y_el_puesto_de_la_persona():
@@ -403,26 +553,28 @@ def _dos_tipos():
                  ("1", "10", "Vacaciones", "2024-02-01", "2024-02-06"))   # 6 días
 
 
-def test_resumen_por_tipo_de_mayor_a_menor_con_su_parte_del_total():
-    assert aus.resumen_por_tipo(_dos_tipos()).to_dict("records") == [
-        {"grupo": "Vacaciones", "novedad": "Vacaciones", "dias": 6, "personas": 1, "pct": 60.0},
+def test_resumen_por_tipo_de_mayor_a_menor_con_su_parte_del_trabajo_posible():
+    # El % es sobre los días-persona que se podían trabajar, no sobre los días de ausencia.
+    assert aus.resumen_por_tipo(_dos_tipos(), 300).to_dict("records") == [
+        {"grupo": "Vacaciones", "novedad": "Vacaciones", "dias": 6, "personas": 1, "pct": 2.0},
         {"grupo": "Enfermedad y salud", "novedad": "Enfermedad", "dias": 4, "personas": 2,
-         "pct": 40.0},
+         "pct": 1.33},
     ]
 
 
 def test_resumen_no_lista_tipos_que_el_filtro_dejo_sin_dias():
     f = aus.filtrar(_dos_tipos(), *TODO_2024, grupos=["Vacaciones"])
-    assert aus.resumen_por_tipo(f)["novedad"].tolist() == ["Vacaciones"]
+    assert aus.resumen_por_tipo(f, 300)["novedad"].tolist() == ["Vacaciones"]
 
 
 def test_kpis():
-    assert aus.kpis(_dos_tipos()) == {"dias": 10, "personas": 2, "promedio": 5.0}
+    assert aus.kpis(_dos_tipos(), 300) == {"dias": 10, "personas": 2, "promedio": 5.0,
+                                           "pct": 3.33}
 
 
 def test_kpis_sin_datos():
     vacio = aus.filtrar(_dos_tipos(), date(2030, 1, 1), date(2030, 1, 2))
-    assert aus.kpis(vacio) == {"dias": 0, "personas": 0, "promedio": 0.0}
+    assert aus.kpis(vacio, 0) == {"dias": 0, "personas": 0, "promedio": 0.0, "pct": 0.0}
 
 
 # ─── Página (AppTest; la API se simula con respuestas reales de requests) ─────
@@ -509,14 +661,86 @@ def _colores(at):
     return {t["name"]: t["marker"]["color"] for t in _figura(at)["data"] if t["type"] == "bar"}
 
 
+def _traza(at, nombre):
+    trazas = [t for t in _figura(at)["data"] if t["name"] == nombre]
+    assert len(trazas) == 1, f"no está la traza «{nombre}»"
+    return trazas[0]
+
+
+def _pct(*dias_y_base):
+    """[(días, base), ...] → los porcentajes que tiene que mostrar el gráfico."""
+    return pytest.approx([dias / base * 100 for dias, base in dias_y_base])
+
+
+# Las tres personas del padrón están empleadas todo el trimestre: 3 × 31, 3 × 29, 3 × 31.
+BASE_PAGINA = [93, 87, 93]
+
+
 def test_pagina_cuenta_las_ausencias_del_grupo_master_en_el_rango(monkeypatch):
     at = _pagina(monkeypatch)
     assert not at.exception
     assert _kpi(at, "Días de ausencia") == "8"
     assert _kpi(at, "Personas con ausencias") == "3"
     assert _kpi(at, "Días por persona") == "2,7"
-    assert _barras(at) == {"Enfermedad y salud": [2, 0, 0], "Ausencias": [0, 1, 0],
-                           "Vacaciones": [5, 0, 0]}
+
+
+def test_las_barras_son_el_porcentaje_del_trabajo_posible(monkeypatch):
+    barras = _barras(_pagina(monkeypatch))
+    assert barras == {"Enfermedad y salud": _pct((2, 93), (0, 87), (0, 93)),
+                      "Ausencias": _pct((0, 93), (1, 87), (0, 93)),
+                      "Vacaciones": _pct((5, 93), (0, 87), (0, 93))}
+
+
+def test_el_kpi_de_ausentismo_es_sobre_el_trabajo_posible_del_rango(monkeypatch):
+    at = _pagina(monkeypatch)
+    assert _kpi(at, "Ausentismo") == "2,93 %"   # 8 días sobre 273 días-persona
+    assert any("273 días-persona" in md.value for md in at.markdown)
+
+
+def test_el_total_lleva_los_dias_y_la_base_para_el_hover(monkeypatch):
+    total = _traza(_pagina(monkeypatch), "Total ausentismo")
+    assert _valores(total["y"]) == _pct((7, 93), (1, 87), (0, 93))
+    assert [c[:2] for c in total["customdata"]] == [[7, 93], [1, 87], [0, 93]]
+    assert "%{y:.2f} %" in total["hovertemplate"] and "días-persona" in total["hovertemplate"]
+
+
+def test_el_hover_de_cada_tipo_muestra_el_porcentaje_y_los_dias(monkeypatch):
+    enfermedad = _traza(_pagina(monkeypatch), "Enfermedad y salud")
+    assert "%{y:.2f} %" in enfermedad["hovertemplate"]
+    assert _valores(enfermedad["customdata"]) == [2, 0, 0]
+
+
+def test_el_eje_y_esta_en_porcentaje(monkeypatch):
+    eje = _figura(_pagina(monkeypatch))["layout"]["yaxis"]
+    assert eje["ticksuffix"] == " %"
+    assert "%" in eje["title"]["text"]
+
+
+def test_los_francos_van_en_una_linea_aparte_sobre_la_misma_base(monkeypatch):
+    francos = _traza(_pagina(monkeypatch), "Francos")
+    assert francos["type"] == "scatter" and francos["line"]["dash"] == "dot"
+    assert _valores(francos["y"]) == _pct((0, 93), (1, 87), (0, 93))
+    assert _valores(francos["customdata"]) == [0, 1, 0]
+    assert "%{y:.2f} %" in francos["hovertemplate"]
+
+
+def test_los_francos_no_suman_dias_de_ausencia(monkeypatch):
+    at = _pagina(monkeypatch)
+    assert _kpi(at, "Días de ausencia") == "8"   # el franco de la conductora de Bragado no suma
+    assert "Francos" not in _barras(at)
+
+
+def test_filtrar_tipos_no_cambia_los_francos_ni_la_base(monkeypatch):
+    at = _pagina(monkeypatch)
+    at.multiselect(key="aus_grupo").set_value(["Vacaciones"]).run()
+    assert _valores(_traza(at, "Francos")["y"]) == _pct((0, 93), (1, 87), (0, 93))
+    assert [c[1] for c in _traza(at, "Total ausentismo")["customdata"]] == BASE_PAGINA
+
+
+def test_sin_francos_en_los_filtros_no_hay_linea_de_francos(monkeypatch):
+    at = _pagina(monkeypatch)
+    at.multiselect(key="aus_sector").set_value(["Operacion Campana"]).run()
+    assert [t["name"] for t in _figura(at)["data"] if t["name"] == "Francos"] == []
 
 
 def test_las_barras_se_apilan_en_el_orden_de_la_definicion(monkeypatch):
@@ -528,13 +752,16 @@ def test_filtro_de_puesto_deja_solo_conductores(monkeypatch):
     at = _pagina(monkeypatch)
     at.multiselect(key="aus_puesto").set_value(["CONDUCTORES"]).run()
     assert _kpi(at, "Personas con ausencias") == "2"
-    assert _barras(at) == {"Enfermedad y salud": [2, 0, 0], "Ausencias": [0, 1, 0]}
+    # La base también es sólo de los dos conductores.
+    assert _barras(at) == {"Enfermedad y salud": _pct((2, 62), (0, 58), (0, 62)),
+                           "Ausencias": _pct((0, 62), (1, 58), (0, 62))}
 
 
 def test_filtro_de_sector(monkeypatch):
     at = _pagina(monkeypatch)
     at.multiselect(key="aus_sector").set_value(["Operacion Bragado"]).run()
-    assert _barras(at) == {"Ausencias": [0, 1, 0]}
+    assert _barras(at) == {"Ausencias": _pct((0, 31), (1, 29), (0, 31))}
+    assert _valores(_traza(at, "Francos")["y"]) == _pct((0, 31), (1, 29), (0, 31))
 
 
 def test_sacar_vacaciones_de_los_tipos(monkeypatch):
@@ -554,7 +781,9 @@ def test_por_semana(monkeypatch):
     at = _pagina(monkeypatch)
     at.radio(key="aus_gran").set_value("Semanal").run()
     assert len(_figura(at)["data"][0]["x"]) == 13   # del lunes 1/1 al domingo 31/3/2024
-    assert sum(sum(v) for v in _barras(at).values()) == 8
+    total = _traza(at, "Total ausentismo")["customdata"]
+    assert sum(c[0] for c in total) == 8
+    assert sum(c[1] for c in total) == sum(BASE_PAGINA)
 
 
 def test_dia_por_dia_con_mas_de_un_anio_agrupa_por_semana_y_avisa(monkeypatch):
@@ -571,7 +800,7 @@ def test_una_novedad_elegida_cuyo_tipo_se_saca_no_rompe_la_pagina(monkeypatch):
     at.multiselect(key="aus_grupo").set_value(["Vacaciones"]).run()
     assert not at.exception
     assert at.multiselect(key="aus_novedad").value == []
-    assert _barras(at) == {"Vacaciones": [5, 0, 0]}
+    assert _barras(at) == {"Vacaciones": _pct((5, 93), (0, 87), (0, 93))}
 
 
 def test_los_periodos_que_el_rango_corta_se_ven_mas_claros(monkeypatch):

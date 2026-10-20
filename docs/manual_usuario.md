@@ -9,7 +9,7 @@ Este manual está diseñado para explicarte paso a paso cómo utilizar el **Dash
 Para acceder a la plataforma, debes ingresar a la URL que se te ha proporcionado (por ejemplo, mediante el enlace de Streamlit Cloud o la URL interna). 
 Al ingresar, verás un menú lateral (a la izquierda) que te permitirá navegar entre los distintos módulos:
 1. **Dashboard** (Rotación de Personal)
-2. **Ausentismo** (días de ausencia por tipo, sector y puesto)
+2. **Ausentismo** (% de días de ausencia y de francos por tipo, sector y puesto)
 3. **Adelantos de Sueldo**
 4. **Descuentos**
 5. **Vencimientos**
@@ -48,7 +48,7 @@ En la parte inferior cuentas con pestañas para ver los gráficos de **Evolució
 
 ## 3. Ausentismo
 
-Esta pestaña muestra **cuántos días faltó el personal del Grupo Master y por qué**, según las novedades que se cargan en el diagrama de MasterBus. La pregunta que mejor responde es: *¿cómo viene el ausentismo, y de qué está hecho?* Los datos se actualizan solos cada hora y la pestaña la ven todos los usuarios.
+Esta pestaña muestra **qué parte de los días que se podían trabajar faltó el personal del Grupo Master, y por qué**, según las novedades que se cargan en el diagrama de MasterBus. También muestra los francos, aparte. La pregunta que mejor responde es: *¿cómo viene el ausentismo, y de qué está hecho?* Los datos se actualizan solos cada hora y la pestaña la ven todos los usuarios.
 
 ### Qué cuenta como ausentismo
 
@@ -57,6 +57,12 @@ Toda novedad que hace faltar al trabajo: enfermedad y salud, accidentes, ausenci
 **No cuentan** los francos ni los feriados (ese día no tocaba trabajar), los francos o feriados trabajados (la persona fue), los ajustes del diagrama (adeuda, devuelve o compensa día, día flex, ajuste de francos) ni el **permiso gremial**: los delegados con permiso de tiempo completo suman el año entero y taparían el ausentismo del resto. La lista completa está en el desplegable *¿Qué cuenta como ausentismo?*, al pie de la pantalla.
 
 Los días se cuentan **corridos**: una licencia del 1 al 10 son 10 días, aunque en el medio caiga un franco.
+
+### Sobre qué se calcula el porcentaje
+
+Todo se mide como **porcentaje del trabajo posible**: los días-persona en que cada persona estaba empleada, de su ingreso a su baja, dentro del rango elegido. Si filtrás un sector o un puesto, la base es sólo la gente de ese sector o puesto. Con un mes de 30 días y 780 personas empleadas, la base son 23.400 días-persona; 470 días de enfermedad son el 2 %. Quien figura inactivo sin fecha de baja no entra en la base, igual que en la dotación del Dashboard.
+
+Los **francos** (Franco, Franco compensatorio y Franco/Feriado) se muestran aparte, como porcentaje de la misma base. **No son ausentismo**: no suman al total ni a los indicadores.
 
 ### Filtros
 
@@ -70,14 +76,15 @@ Están todos arriba, en una sola fila, y valen para los indicadores, el gráfico
 
 ### Indicadores, gráfico y tablas
 
-- **Días de ausencia**, **Personas con ausencias** (al menos un día en el rango) y **Días por persona** (promedio entre quienes faltaron).
-- El gráfico apila los días de cada tipo en cada período y marca el total con una línea. Pasando el mouse por un período ves el detalle. **Las barras más claras son períodos incompletos** (el mes en curso, o uno que el rango corta por la mitad): no los compares de igual a igual con el resto.
-- *Ver los datos del gráfico* muestra los mismos números en una tabla.
-- *Detalle por novedad* desglosa cada tipo con sus días, sus personas y su parte del total.
+- **Ausentismo** (los días de ausencia como % del trabajo posible del rango), **Días de ausencia**, **Personas con ausencias** (al menos un día en el rango) y **Días por persona** (promedio entre quienes faltaron).
+- El gráfico apila el % de cada tipo de ausencia en cada período y marca el total con una línea negra. Los francos van en una **línea punteada** aparte; con un clic en «Francos», en la leyenda, se oculta. Pasando el mouse por un período ves el % exacto de cada tipo con sus días, el total, los francos y la base de ese período. **Las barras más claras son períodos incompletos** (el mes en curso, o uno que el rango corta por la mitad): su % se calcula sólo sobre los días que entran en el rango.
+- *Ver los datos del gráfico* muestra los mismos porcentajes en una tabla, con los días de ausencia, los de franco y los días-persona posibles de cada período.
+- *Detalle por novedad* desglosa cada tipo con sus días, sus personas y su % del trabajo posible.
 
 ### Para tener en cuenta
 
 - **Sector y puesto son los de hoy.** Si alguien cambió de puesto, sus ausencias anteriores aparecen con el puesto actual: MasterBus no guarda el historial.
+- **Los francos sólo están cargados para quien trabaja con diagrama**, sobre todo conductores. En Operación SUR y en los puestos administrativos no hay ninguno. Por eso, con todos los puestos el % de francos queda diluido (~10 %). Para leerlo bien, filtrá **Conductores** (~15 %).
 - **Sólo cuenta quien está en el padrón del Grupo Master.** Al pie de la pantalla se informa cuántas novedades quedan afuera por ser de personas que no figuran.
 - Si un mismo día tiene dos novedades distintas (por ejemplo, *Enfermedad* y *Constancia de Atención Médica*), cuenta en las dos.
 
