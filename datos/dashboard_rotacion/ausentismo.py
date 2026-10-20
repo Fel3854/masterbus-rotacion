@@ -3,13 +3,16 @@
 La API de novedades (`/api/v1/auto`) trae todo lo que se carga en el diagrama:
 francos, feriados, días trabajados, compensaciones y ausencias. Acá se define
 qué cuenta como ausentismo, se pasa cada novedad (un rango desde–hasta) a días
-de ausencia y se agrega por período. Sin Streamlit: la página
-`pages/10_Ausentismo.py` se encarga del caché y de la pantalla.
+de ausencia y se agrega por período. Los francos no son ausentismo, pero se
+muestran aparte. Ambos se miden como porcentaje del trabajo posible: los
+días-persona en que cada persona del padrón estaba empleada. Sin Streamlit: la
+página `pages/10_Ausentismo.py` se encarga del caché y de la pantalla.
 """
 
 import json
 from datetime import date
 
+import numpy as np
 import pandas as pd
 import requests
 
@@ -33,6 +36,11 @@ NOVEDADES_EXCLUIDAS = frozenset({
     "Control de ausentismo",
     "Permiso Gremial",
 })
+# Los francos tampoco son ausentismo, pero el gráfico los muestra aparte, como
+# porcentaje de la misma base (decidido por Feli, 2026-10-20). Feriados, días
+# trabajados y ajustes del diagrama no entran.
+NOVEDADES_FRANCO = frozenset({"Franco", "Franco compensatorio", "FRANCO/FERIADO"})
+GRUPO_FRANCOS = "Francos"
 
 # Todo lo demás cuenta. Para el gráfico se agrupa: 32 tipos no se pueden apilar
 # con colores que se distingan. El orden es el de la pila, de abajo hacia
@@ -68,6 +76,8 @@ DIAS_MAX_DIARIA = 366
 
 
 def grupo_de(novedad: str) -> str:
+    if novedad in NOVEDADES_FRANCO:
+        return GRUPO_FRANCOS
     return TIPO_A_GRUPO.get(novedad, GRUPO_OTRAS)
 
 
@@ -87,8 +97,8 @@ def parsear_novedades(contenido) -> list:
     """Lee la respuesta de la API quedándose sólo con lo que se usa.
 
     Son ~47 MB y 320 mil novedades: leídas enteras como diccionarios le suman
-    unos 430 MB a la memoria de la app (así, unos 150). Por eso al parsear se
-    descarta lo que no es ausentismo (dos de cada tres son francos) y los
+    unos 430 MB a la memoria de la app. Por eso al parsear se descarta lo que
+    no es ni ausentismo ni franco (feriados, días trabajados, ajustes) y los
     nombres; cada novedad queda como `(id_empleado, legajo, novedad, desde,
     hasta)`, y los textos repetidos (fechas, tipos) se guardan una sola vez.
     """
@@ -101,7 +111,7 @@ def parsear_novedades(contenido) -> list:
     def registro(pares):
         d = dict(pares)
         novedad = texto(d.get("novedad"))
-        if novedad in NOVEDADES_EXCLUIDAS:
+        if novedad in NOVEDADES_EXCLUIDAS and novedad not in NOVEDADES_FRANCO:
             return None
         return (texto(d.get("id_empleado")), texto(d.get("legajo")), novedad,
                 texto(d.get("desde")), texto(d.get("hasta")))
@@ -145,26 +155,57 @@ def normalizar_novedades(registros, hoy: date) -> pd.DataFrame:
     return df
 
 
-def cruzar_padron(novedades: pd.DataFrame, padron: pd.DataFrame):
-    """Suma sector, puesto y empleador de cada persona, cruzando por `id_empleado`.
+def personas_del_padron(padron: pd.DataFrame) -> pd.DataFrame:
+    """Cada persona del padrón con su sector, puesto, empleador y período de empleo.
 
-    Por legajo no se puede: el mismo legajo existe en más de una empresa del
-    grupo. Quedan sólo las personas del padrón que se pasa (el del Grupo
-    Master); lo que queda afuera vuelve contado, para avisarlo en la página.
+    `padron` es el de `utils.cargar_datos()`, con `fecha_inicio` y `fecha_fin` ya
+    parseadas. `inicio` y `fin` quedan como Timestamp (`fin` vacío si sigue).
+    Quien figura inactivo sin fecha de baja no entra: no se sabe hasta cuándo
+    estuvo. Es la misma regla de dotación que el Dashboard (`_mask_fantasma`).
     Sector y puesto son los de hoy: la API no guarda el historial.
-
-    Devuelve `(novedades_cruzadas, {"novedades": n, "personas": n})`.
     """
+    inicio = pd.to_datetime(padron["fecha_inicio"])
+    fin = pd.to_datetime(padron["fecha_fin"])
+    fantasma = (padron["activo"].astype(str) != "1") & fin.isna()
     personas = pd.DataFrame({
         "id_empleado": padron["id_empleado"].astype(str).str.strip(),
         "sector": padron["str"].fillna("").astype(str).str.strip().replace("", SIN_DATO),
         "puesto": padron["cargo"].map(normalizar_puesto),
         "empleador": padron["empleador"].fillna("").astype(str).str.strip(),
-    }).drop_duplicates("id_empleado")
+        "inicio": inicio,
+        "fin": fin,
+    })[inicio.notna() & ~fantasma]
+    return personas.drop_duplicates("id_empleado").reset_index(drop=True)
+
+
+def cruzar_padron(novedades: pd.DataFrame, padron: pd.DataFrame):
+    """Suma sector, puesto y empleador de cada persona, cruzando por `id_empleado`.
+
+    Por legajo no se puede: el mismo legajo existe en más de una empresa del
+    grupo. Quedan sólo las personas de `personas_del_padron()` (el Grupo
+    Master); lo que queda afuera vuelve contado, para avisarlo en la página.
+    Cada novedad se recorta al período de empleo de la persona: antes del
+    ingreso o después de la baja no es parte del trabajo posible, y si contara
+    el porcentaje podría pasar del 100 (es ~0,5 % de los días).
+
+    Devuelve `(novedades_cruzadas, {"novedades": n, "personas": n})`.
+    """
+    personas = personas_del_padron(padron)
     dentro = novedades["id_empleado"].isin(personas["id_empleado"])
     afuera = {"novedades": int((~dentro).sum()),
               "personas": novedades.loc[~dentro, "id_empleado"].nunique()}
-    return novedades.merge(personas, on="id_empleado", how="inner"), afuera
+    cruzadas = novedades.merge(personas, on="id_empleado", how="inner")
+    cruzadas["desde"] = cruzadas[["desde", "inicio"]].max(axis=1)
+    cruzadas["hasta"] = cruzadas[["hasta", "fin"]].min(axis=1)   # sin baja, queda `hasta`
+    cruzadas = cruzadas[cruzadas["desde"] <= cruzadas["hasta"]]
+    return cruzadas.drop(columns=["inicio", "fin"]).reset_index(drop=True), afuera
+
+
+def separar_francos(novedades: pd.DataFrame):
+    """`(ausencias, francos)`: los francos se cuentan aparte, nunca como ausentismo."""
+    es_franco = novedades["novedad"].isin(NOVEDADES_FRANCO)
+    return (novedades[~es_franco].reset_index(drop=True),
+            novedades[es_franco].reset_index(drop=True))
 
 
 def expandir_a_dias(novedades: pd.DataFrame) -> pd.DataFrame:
@@ -219,12 +260,43 @@ def serie(dias: pd.DataFrame, granularidad: str, desde: date, hasta: date) -> pd
     else:
         periodo = dias["dia"].dt.to_period(frecuencia).dt.start_time.rename("periodo")
         tabla = dias.groupby([periodo, dias["grupo"].astype(str)]).size().unstack(fill_value=0)
-        orden = [g for g in GRUPOS + [GRUPO_OTRAS] if g in tabla.columns]
+        orden = [g for g in GRUPOS + [GRUPO_OTRAS, GRUPO_FRANCOS] if g in tabla.columns]
         tabla = tabla.reindex(index=inicios, columns=orden, fill_value=0)
     tabla["Total"] = tabla.sum(axis=1)
     tabla.index.name = "periodo"
     tabla.columns.name = None
     return tabla.astype(int)
+
+
+def dias_posibles(personas: pd.DataFrame, granularidad: str, desde: date, hasta: date,
+                  sectores=(), puestos=()) -> pd.Series:
+    """El trabajo posible de cada período: la base de todos los porcentajes.
+
+    Son los días-persona en que cada persona de `personas_del_padron()` estaba
+    empleada (ingreso ≤ día ≤ baja), dentro de [desde, hasta] y de los filtros de
+    sector y puesto. Días corridos, igual que las ausencias. Tiene el mismo
+    índice que `serie()`.
+    """
+    periodos = pd.period_range(pd.Timestamp(desde), pd.Timestamp(hasta),
+                               freq=_FRECUENCIA[granularidad])
+    elegidas = personas
+    for columna, valores in (("sector", sectores), ("puesto", puestos)):
+        if valores:
+            elegidas = elegidas[elegidas[columna].isin(list(valores))]
+    # Una fila por persona y una columna por período: son pocos miles por unos cientos.
+    desde_periodo = np.maximum(periodos.start_time.to_numpy(), pd.Timestamp(desde).to_datetime64())
+    hasta_periodo = np.minimum(periodos.end_time.normalize().to_numpy(),
+                               pd.Timestamp(hasta).to_datetime64())
+    inicio = elegidas["inicio"].to_numpy()[:, None]
+    fin = elegidas["fin"].fillna(pd.Timestamp(hasta)).to_numpy()[:, None]
+    dias = (np.minimum(fin, hasta_periodo) - np.maximum(inicio, desde_periodo)) // np.timedelta64(1, "D") + 1
+    return pd.Series(np.clip(dias, 0, None).sum(axis=0).astype(int),
+                     index=periodos.start_time.rename("periodo"), name="posibles")
+
+
+def porcentajes(tabla, posibles: pd.Series):
+    """Días (por período, en filas) como % del trabajo posible; sin nadie empleado, NaN."""
+    return tabla.div(posibles.where(posibles > 0), axis=0) * 100
 
 
 def incompletos(inicios, granularidad: str, desde: date, hasta: date) -> list:
@@ -233,19 +305,27 @@ def incompletos(inicios, granularidad: str, desde: date, hasta: date) -> list:
     return [p.start_time.date() < desde or p.end_time.date() > hasta for p in periodos]
 
 
-def resumen_por_tipo(dias: pd.DataFrame) -> pd.DataFrame:
-    """Días y personas por tipo de novedad, de mayor a menor, con su % de los días."""
+def _pct(dias, posibles: int):
+    return (dias / posibles * 100).round(2) if posibles else 0.0
+
+
+def resumen_por_tipo(dias: pd.DataFrame, posibles: int) -> pd.DataFrame:
+    """Días y personas por tipo de novedad, de mayor a menor, con su % del trabajo posible.
+
+    `posibles` son los días-persona del rango (`dias_posibles().sum()`): el % no es
+    sobre los días de ausencia, así que no suma 100.
+    """
     tabla = (dias.assign(grupo=dias["grupo"].astype(str), novedad=dias["novedad"].astype(str))
              .groupby(["grupo", "novedad"])
              .agg(dias=("dia", "size"), personas=("id_empleado", "nunique"))
              .reset_index())
-    total = tabla["dias"].sum()
-    tabla["pct"] = (tabla["dias"] / total * 100).round(1) if total else 0.0
+    tabla["pct"] = _pct(tabla["dias"], posibles)
     return tabla.sort_values(["dias", "novedad"], ascending=[False, True]).reset_index(drop=True)
 
 
-def kpis(dias: pd.DataFrame) -> dict:
-    """Días de ausencia, personas con al menos uno y días promedio por persona."""
+def kpis(dias: pd.DataFrame, posibles: int) -> dict:
+    """Días de ausencia, su % del trabajo posible, personas con al menos uno y días por persona."""
     personas = dias["id_empleado"].nunique()
     return {"dias": len(dias), "personas": personas,
-            "promedio": round(len(dias) / personas, 1) if personas else 0.0}
+            "promedio": round(len(dias) / personas, 1) if personas else 0.0,
+            "pct": float(round(len(dias) / posibles * 100, 2)) if posibles else 0.0}

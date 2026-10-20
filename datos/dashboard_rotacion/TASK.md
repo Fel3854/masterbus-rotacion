@@ -90,7 +90,7 @@ derecha, entrando como dueño de la app) → **⋮** → **Reboot app**.
 
 | Módulo | Descripción |
 |---|---|
-| Ausentismo | Días de ausencia por novedades de MasterBus (`/api/v1/auto`), apilados por tipo; filtros por sector, puesto, tipo y novedad. La ven todos |
+| Ausentismo | Días de ausencia por novedades de MasterBus (`/api/v1/auto`) como % del trabajo posible (días-persona empleados), apilados por tipo, con los francos en una línea aparte; filtros por sector, puesto, tipo y novedad. La ven todos |
 | Adelantos de Sueldo | Alta de adelantos + exportación Excel formato Santander |
 | Descuentos | Alta de descuentos con cuotas + exportación TXT para liquidación |
 | Vencimientos | Control de documentación y habilitaciones próximas a vencer |
@@ -360,16 +360,39 @@ nombre, legajo, id_empleado}`, con fechas ISO (el padrón usa `dd/mm/yyyy`).
   (208 casos en el padrón del grupo). Sector = `str`, puesto = `cargo` con
   CONDUCTOR → CONDUCTORES (la regla de Seguimiento). Son los de hoy: la API no
   guarda historial. Queda afuera quien no está en `cargar_datos()` (~5 % de
-  los días), y la página lo informa.
+  los días), y la página lo informa. También queda afuera quien figura
+  inactivo sin fecha de baja: es la regla de dotación del Dashboard
+  (`_mask_fantasma`). Cada novedad se recorta al período de empleo de la
+  persona (ingreso ≤ día ≤ baja): así el numerador siempre queda dentro de la
+  base. Recorta ~0,5 % de los días.
+- **Porcentajes (2026-10-20, pedido por Feli)**: el gráfico, el KPI
+  «Ausentismo» y el detalle por novedad están en % del **trabajo posible**.
+  `dias_posibles()` lo calcula: los días-persona en que cada persona de
+  `personas_del_padron()` estaba empleada, dentro del rango y de los filtros de
+  sector y puesto. Los filtros de tipo y de novedad no la tocan. Es la misma
+  base para todos los tipos, así que los % se suman. Sep-2026: base 23.303
+  días-persona, ausentismo 6,47 %, francos 9,65 %.
+- **Francos**: `NOVEDADES_FRANCO` (Franco, Franco compensatorio,
+  FRANCO/FERIADO) sigue dentro de `NOVEDADES_EXCLUIDAS`, porque no es
+  ausentismo. Se separa con `separar_francos()` y va en una línea punteada
+  aparte, sobre la misma base. Decisión de Feli del 2026-10-20; los feriados no
+  van. MasterBus sólo los tiene para quien trabaja con diagrama (en sep-2026,
+  401 de 480 conductores; ninguno en Operación SUR ni en administrativos). Por
+  eso, con todos los puestos el % queda diluido (~10 %, contra ~15 % de
+  Conductores), y la página lo avisa.
 - **Memoria**: parseada entera, la respuesta le suma ~430 MB al proceso, encima
-  de lo que ya usa la app. `parsear_novedades()` descarta al parsear lo excluido
-  y los nombres: suma ~150 MB, una vez por hora (medido contra la API el
-  2026-10-16). El caché de la página (`_cargar`, 1 h, `max_entries=1`) guarda
-  directo los días-persona (~3 MB). Si un día no alcanza, el paso siguiente es
+  de lo que ya usa la app. `parsear_novedades()` descarta al parsear lo que no
+  es ni ausentismo ni franco, y los nombres. Con francos quedan ~240 mil
+  novedades, 213 mil de ellas francos. Medido el 2026-10-20 contra la API: el
+  parseo sube el RSS en ~90 MB; sin francos, con la misma medición, eran ~60.
+  Se hace una vez por hora. El caché de la página (`_cargar`, 1 h,
+  `max_entries=1`) guarda directo los días de ausencia y los de franco (~3 MB
+  cada uno) y el padrón reducido. Si un día no alcanza, el paso siguiente es
   pedirle a MasterBus que la API filtre por fecha o por tipo.
 - **Colores**: uno fijo por grupo, validado para daltonismo con la skill de
   dataviz; el orden de la pila es el de `GRUPOS`. Tres quedan bajo 3:1 de
-  contraste: por eso la tabla «Ver los datos del gráfico».
+  contraste: por eso la tabla «Ver los datos del gráfico». La línea de francos es
+  gris punteada (`COLOR_FRANCOS`), más oscura que «Otras» y con 5,5:1 de contraste.
 - La ven todos los usuarios logueados: no hay permiso ni migración.
 
 ## Parámetros / Variables de entorno
