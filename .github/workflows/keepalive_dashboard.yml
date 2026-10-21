@@ -13,11 +13,14 @@ jobs:
         run: pip install playwright && playwright install chromium --with-deps
 
       - name: Despertar app Streamlit
+        env:
+          STREAMLIT_APP_URL: ${{ secrets.STREAMLIT_APP_URL }}
         run: |
           python3 - <<'EOF'
+          import os
           from playwright.sync_api import sync_playwright
 
-          URL = "https://masterbus-rotacion-42fy66dm5ug3nu59ukvwfh.streamlit.app"
+          URL = os.environ["STREAMLIT_APP_URL"]
 
           with sync_playwright() as p:
               browser = p.chromium.launch()
@@ -37,3 +40,9 @@ jobs:
               print("Keepalive completado.")
               browser.close()
           EOF
+
+      - name: Reportar fallo
+        if: failure()
+        run: |
+          echo "::error::El keepalive del dashboard falló. La app puede estar dormida."
+          echo "Revisar: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"

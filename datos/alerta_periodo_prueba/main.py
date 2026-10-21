@@ -43,72 +43,23 @@ logger = logging.getLogger(__name__)
 NOTIFICADOS_FILE = Path(__file__).resolve().parent / "notificados.json"
 FECHAS_INVALIDAS = {"00/00/0000", "", None}
 
-# ─── Mapeo cargo → gerente responsable ──────────────────────
-CARGO_GERENTE = {
-    "ACTIVADOR":                                     "jcabral@masterbus.net",
-    "ADMINISTRADOR DE COORDINACION IT":              "icarvajal@masterbus.net",
-    "ADMINISTRATIVO":                                "dscirocco@masterbus.net",
-    "ASISTENTE ADM DE INTENDENCIA":                  "ellanos@masterbus.net",
-    "ASISTENTE ADM. DE RRHH":                        "ffillopski@masterbus.net",
-    "ASISTENTE ADMINISTRATIVO DE PAÃOL":             "jcabral@masterbus.net",
-    "ASISTENTE ADMINISTRATIVO DE SEGURIDAD VIAL":    "jcigna@masterbus.net",
-    "ASISTENTE ADMINISTRATIVO DE TALLER":            "asalvetti@masterbus.net",
-    "ASISTENTE BALANCE Y DOCUMENTACION DE BANCOS":   "dscirocco@masterbus.net",
-    "ASISTENTE CONTABLE":                            "dscirocco@masterbus.net",
-    "ASISTENTE DE ABASTECIMIENTO":                   "jcabral@masterbus.net",
-    "ASISTENTE DE GESTION":                          "dscirocco@masterbus.net",
-    "ASISTENTE DE LICITACIONES":                     "dscirocco@masterbus.net",
-    "ASISTENTE DE NORMAS ISO":                       "talcantara@masterbus.net",
-    "ASISTENTE DE SEGURIDAD INDUSTRIAL Y AMBIENTE":  "talcantara@masterbus.net",
-    "ASISTENTE OPERATIVO":                           "mdepeon@masterbus.net",
-    "ASISTENTE OPERATIVO DE SEGURIDAD VIAL":         "jcigna@masterbus.net",
-    "BRIGADISTA":                                    "talcantara@masterbus.net",
-    "CADETE":                                        "dscirocco@masterbus.net",
-    "CELADOR":                                       "mdepeon@masterbus.net",
-    "CHAPISTA":                                      "asalvetti@masterbus.net",
-    "CHAPISTA (SALTA/CAT)":                          "asalvetti@masterbus.net",
-    "CONDUCTOR":                                     "mdepeon@masterbus.net",
-    "COORDINADOR DE BASES":                          "asalvetti@masterbus.net",
-    "COORDINADOR DE IT FLOTA":                       "icarvajal@masterbus.net",
-    "DESPACHANTE DE COMBUSTIBLE":                    "ellanos@masterbus.net",
-    "DIAGRAMADOR DE TRAFICO":                        "mdepeon@masterbus.net",
-    "ELECTRICISTA":                                  "asalvetti@masterbus.net",
-    "ELECTRICISTA (SALTA/CAT)":                      "asalvetti@masterbus.net",
-    "EMPLEADO PANIOL":                               "jcabral@masterbus.net",
-    "ENCARGADO DE CUENTAS A PAGAR":                  "dscirocco@masterbus.net",
-    "ENCARGADO DE FACTURACION":                      "dscirocco@masterbus.net",
-    "ENCARGADO DE TESORERIA":                        "dscirocco@masterbus.net",
-    "ENCARGADO IMPOSITIVO":                          "dscirocco@masterbus.net",
-    "FORMADORES":                                    "jcigna@masterbus.net",
-    "LAVADOR":                                       "ellanos@masterbus.net",
-    "LIDER DE PAÃOL":                                "jcabral@masterbus.net",
-    "LIQUIDADOR DE SUELDOS - GESTION DOC. EMPRESAS": "ffillopski@masterbus.net",
-    "MAESTRANZA":                                    "ellanos@masterbus.net",
-    "MAESTRANZA OLAV":                               "ellanos@masterbus.net",
-    "MECANICO":                                      "asalvetti@masterbus.net",
-    "MECANICO (SALTA/CAT)":                          "asalvetti@masterbus.net",
-    "OPERADOR":                                      "mdepeon@masterbus.net",
-    "PAÃOLERO":                                      "jcabral@masterbus.net",
-    "PROGRAMADOR OPERATIVO":                         "mdepeon@masterbus.net",
-    "PROGRAMADOR/DESARROLLO":                        "mdepeon@masterbus.net",
-    "RECEPCION":                                     "dscirocco@masterbus.net",
-    "SEGURIDAD VIAL Y CAPACITACIONES":               "jcigna@masterbus.net",
-    "SOPORTE ON SITE IT FLOTA":                      "icarvajal@masterbus.net",
-    "SUPERVISOR ADM DE CARROCERIA":                  "asalvetti@masterbus.net",
-    "SUPERVISOR DE CHAPA Y PINTURA":                 "asalvetti@masterbus.net",
-    "SUPERVISOR DE ELECTRICISTAS":                   "asalvetti@masterbus.net",
-    "SUPERVISOR DE OPERACIONES DE TALLER":           "asalvetti@masterbus.net",
-    "SUPERVISOR DE PLANTA":                          "mdepeon@masterbus.net",
-    "SUPERVISOR DE PLAYA":                           "ellanos@masterbus.net",
-    "SUPERVISOR DE SUPERVISORES":                    "mdepeon@masterbus.net",
-    "SUPERVISOR DE TALLER":                          "asalvetti@masterbus.net",
-    "SUPERVISOR GENERAL":                            "asalvetti@masterbus.net",
-    "SUPERVISOR OPERATIVO":                          "mdepeon@masterbus.net",
-    "TALLER OLAV":                                   "asalvetti@masterbus.net",
-}
-
 
 # ─── Funciones auxiliares ────────────────────────────────────
+
+def fetch_cargo_gerente(supabase_url: str, supabase_key: str) -> Dict[str, str]:
+    """Carga el mapeo cargo → email de gerente desde Supabase (tabla gerentes_cargo)."""
+    url = f"{supabase_url}/rest/v1/gerentes_cargo?select=cargo,email_gerente"
+    headers = {
+        "apikey": supabase_key,
+        "Authorization": f"Bearer {supabase_key}",
+    }
+    resp = requests.get(url, headers=headers, timeout=10)
+    resp.raise_for_status()
+    data = resp.json()
+    mapping = {row["cargo"]: row["email_gerente"] for row in data}
+    logger.info("Mapeo cargo→gerente cargado desde Supabase: %d entradas", len(mapping))
+    return mapping
+
 
 def parse_fecha(fecha_str: str) -> Optional[date]:
     if not fecha_str or fecha_str.strip() in FECHAS_INVALIDAS:
@@ -191,14 +142,14 @@ def filtrar_empleados_mes5(
     return resultado
 
 
-def agrupar_por_gerente(empleados: List[Dict]) -> Dict[str, List[Dict]]:
+def agrupar_por_gerente(empleados: List[Dict], cargo_gerente: Dict[str, str]) -> Dict[str, List[Dict]]:
     """Agrupa empleados según el gerente responsable de su cargo."""
     grupos: Dict[str, List[Dict]] = defaultdict(list)
     sin_gerente = []
 
     for emp in empleados:
         cargo = emp.get("cargo", "").strip().upper()
-        gerente = CARGO_GERENTE.get(cargo)
+        gerente = cargo_gerente.get(cargo)
         if gerente:
             grupos[gerente].append(emp)
         else:
@@ -282,20 +233,26 @@ def enviar_email(
     msg["Subject"] = asunto
     msg.attach(MIMEText(cuerpo, "html", "utf-8"))
 
-    try:
-        if smtp_use_tls:
-            server = smtplib.SMTP(smtp_host, smtp_port)
-            server.starttls()
-        else:
-            server = smtplib.SMTP_SSL(smtp_host, smtp_port)
-
-        server.login(smtp_user, smtp_password)
-        server.sendmail(smtp_user, [destinatario], msg.as_string())
-        server.quit()
-        logger.info("Email enviado a %s (%d empleados)", destinatario, len(empleados))
-    except smtplib.SMTPException as e:
-        logger.error("Error al enviar email a %s: %s", destinatario, e)
-        raise
+    intentos = 3
+    for intento in range(1, intentos + 1):
+        try:
+            if smtp_use_tls:
+                server = smtplib.SMTP(smtp_host, smtp_port)
+                server.starttls()
+            else:
+                server = smtplib.SMTP_SSL(smtp_host, smtp_port)
+            server.login(smtp_user, smtp_password)
+            server.sendmail(smtp_user, [destinatario], msg.as_string())
+            server.quit()
+            logger.info("Email enviado a %s (%d empleados)", destinatario, len(empleados))
+            return
+        except smtplib.SMTPException as e:
+            logger.warning("Intento %d/%d fallido al enviar email a %s: %s", intento, intentos, destinatario, e)
+            if intento < intentos:
+                import time
+                time.sleep(5)
+    logger.error("No se pudo enviar email a %s tras %d intentos.", destinatario, intentos)
+    raise smtplib.SMTPException(f"Fallo definitivo al enviar a {destinatario}")
 
 
 def imprimir_tabla_consola(empleados: List[Dict]) -> None:
@@ -335,16 +292,24 @@ def main():
         SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASSWORD, SMTP_USE_TLS,
         ALERTA_DIA_MIN as dia_min,
         ALERTA_DIA_MAX as dia_max,
+        SUPABASE_URL, SUPABASE_KEY,
     )
 
-    # 1. Obtener empleados
+    # 1. Cargar mapeo cargo → gerente desde Supabase
+    try:
+        cargo_gerente = fetch_cargo_gerente(SUPABASE_URL, SUPABASE_KEY)
+    except Exception as e:
+        logger.error("No se pudo cargar el mapeo cargo→gerente desde Supabase: %s", e)
+        sys.exit(1)
+
+    # 2. Obtener empleados
     empleados = fetch_empleados(api_url)
 
-    # 2. Cargar notificados previos
+    # 3. Cargar notificados previos
     notificados = cargar_notificados()
     logger.info("Empleados previamente notificados: %d", len(notificados))
 
-    # 3. Filtrar empleados en mes 5
+    # 4. Filtrar empleados en mes 5
     alertas = filtrar_empleados_mes5(empleados, notificados, dia_min, dia_max)
     logger.info("Empleados nuevos en mes 5 detectados: %d", len(alertas))
 
@@ -352,11 +317,11 @@ def main():
         logger.info("No hay empleados nuevos para notificar. Fin de ejecución.")
         return
 
-    # 4. Mostrar en consola
+    # 5. Mostrar en consola
     imprimir_tabla_consola(alertas)
 
-    # 5. Agrupar por gerente responsable
-    grupos = agrupar_por_gerente(alertas)
+    # 6. Agrupar por gerente responsable
+    grupos = agrupar_por_gerente(alertas, cargo_gerente)
     logger.info("Gerentes a notificar: %d", len(grupos))
 
     if args.dry_run:
@@ -402,4 +367,22 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    # Heartbeat al dashboard-control (Fase 3): reporta que el batch corrio.
+    # Solo en corridas reales (no --dry-run). Best-effort: nunca rompe el batch.
+    es_dry = "--dry-run" in sys.argv
+    exito = True
+    try:
+        main()
+    except SystemExit as e:
+        exito = e.code in (0, None)
+        raise
+    except Exception:
+        exito = False
+        raise
+    finally:
+        if not es_dry:
+            try:
+                from heartbeat import reportar_heartbeat
+                reportar_heartbeat(ok=exito)
+            except Exception:
+                pass
