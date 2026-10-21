@@ -67,6 +67,7 @@ def cargar_datos():
     df_master = df_master[df_master["fecha_inicio"].notna()].copy()
     df_master["cargo"] = df_master["cargo"].str.strip().str.upper()
     df_master["str"] = df_master["str"].str.strip()
+    df_master["activo"] = df_master["activo"].astype(str)
 
     return df_master
 
@@ -175,13 +176,16 @@ def main():
         print(f"  {sector:<42} {n:>5}  ({pct:5.1f}%)  {bar}")
     print()
 
-    # ── Composición: activos puros vs activos con fin futuro ─────
-    sin_fin = plantilla["fecha_fin"].isna().sum()
-    con_fin = plantilla["fecha_fin"].notna().sum()
+    # ── Composición: activos reales / fantasmas / con fin futuro ─
+    fantasmas       = int(((plantilla["activo"] != "1") & plantilla["fecha_fin"].isna()).sum())
+    activos_reales  = int(((plantilla["activo"] == "1") & plantilla["fecha_fin"].isna()).sum())
+    con_fin         = int(plantilla["fecha_fin"].notna().sum())
     print("COMPOSICIÓN:")
-    print(f"  Sin fecha de baja (siguen activos):         {sin_fin:>5}")
-    print(f"  Con fecha de baja posterior al inicio:      {con_fin:>5}   ← se van durante o después del período")
-    print(f"  Total plantilla al inicio:                  {total:>5}")
+    print(f"  Activos sin fecha de baja (siguen en plantilla):    {activos_reales:>5}")
+    print(f"  Inactivos SIN fecha de baja (egresos no fechados):  {fantasmas:>5}   ← NO se cuentan en el dashboard")
+    print(f"  Con fecha de baja posterior al inicio:              {con_fin:>5}   ← se van durante o después del período")
+    print(f"  Total (criterio solo-fechas):                       {total:>5}")
+    print(f"  Plantilla efectiva del dashboard (sin fantasmas):   {total - fantasmas:>5}")
     print()
 
     # ── Antigüedad promedio ──────────────────────────────────────

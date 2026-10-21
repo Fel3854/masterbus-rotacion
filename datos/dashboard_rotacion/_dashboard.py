@@ -112,24 +112,30 @@ def cargar_datos():
     return df, datetime.now()
 
 
+def _mask_fantasma(df):
+    """Inactivos sin fecha de baja registrada: egresos no fechados en MasterBus.
+
+    Estos empleados se fueron (activo != "1") pero nadie cargó su fecha de baja,
+    así que no se pueden ubicar en ningún período. Se excluyen de la plantilla
+    porque de otro modo inflarían la dotación histórica, y no se cuentan como
+    bajas porque no tienen fecha.
+    """
+    return (df["activo"] != "1") & df["fecha_fin"].isna()
+
+
 def calcular_rotacion(df, inicio, fin):
-    """Plantilla al inicio del período + bajas + altas + tasa."""
-    hoy = date.today()
-    if fin >= hoy:
-        # Período en curso: excluir inactivos sin fecha de baja registrada
-        plantilla = df[
-            (df["fecha_inicio"] < inicio)
-            & (
-                (df["activo"] == "1")
-                | (df["fecha_fin"].notna() & (df["fecha_fin"] >= inicio))
-            )
-        ]
-    else:
-        # Período histórico: solo criterio de fechas
-        plantilla = df[
-            (df["fecha_inicio"] < inicio)
-            & (df["fecha_fin"].isna() | (df["fecha_fin"] >= inicio))
-        ]
+    """Plantilla al inicio del período + bajas + altas + tasa.
+
+    La plantilla usa una única definición para todos los períodos: empleados
+    presentes según fechas (ingreso anterior al período y sin baja previa),
+    excluyendo a los inactivos sin fecha de baja registrada (ver _mask_fantasma).
+    Con datos completos esto equivale a la fórmula documentada (solo fechas).
+    """
+    plantilla = df[
+        (df["fecha_inicio"] < inicio)
+        & (df["fecha_fin"].isna() | (df["fecha_fin"] >= inicio))
+        & ~_mask_fantasma(df)
+    ]
     bajas = df[
         df["fecha_fin"].notna()
         & (df["fecha_fin"] >= inicio)
@@ -755,6 +761,16 @@ elif tasa > media_hist and media_hist > 0:
         f"**Rotación por encima del promedio** — {tasa:.1f}% vs media histórica {media_hist:.1f}%."
     )
 
+# Aviso de calidad de datos: inactivos sin fecha de baja registrada
+n_sin_fecha = int(_mask_fantasma(df).sum())
+if n_sin_fecha:
+    st.warning(
+        f"**{n_sin_fecha} empleados inactivos sin fecha de baja registrada** — "
+        "se fueron pero MasterBus no tiene cargada la fecha, así que no se cuentan "
+        "como bajas en ningún mes ni afectan la dotación. Cargá la fecha de baja en "
+        "MasterBus para corregirlo. Ver el detalle en «Bajas sin fecha registrada» abajo."
+    )
+
 # ─── Bajas del período (detalle nominal) ─────────────────────
 st.markdown(f"""
 <div style="display:flex;align-items:center;gap:8px;margin:12px 0 8px;">
@@ -791,6 +807,43 @@ else:
         file_name=f"bajas_{label_periodo.replace(' ', '_')}.csv",
         mime="text/csv",
     )
+
+# ─── Bajas sin fecha registrada (calidad de datos) ───────────
+df_sin_fecha = df[_mask_fantasma(df)]
+if not df_sin_fecha.empty:
+    with st.expander(
+        f"⚠  Bajas sin fecha registrada — {len(df_sin_fecha)} empleados "
+        "(no se cuentan en la rotación)"
+    ):
+        st.caption(
+            "Empleados marcados como inactivos en MasterBus pero sin fecha de baja "
+            "cargada. No se pueden ubicar en ningún mes, por lo que no figuran como "
+            "bajas ni en la dotación. Cargá la fecha de baja en MasterBus para corregirlo."
+        )
+
+        def _antig_hoy(row):
+            if row["fecha_inicio"]:
+                d = relativedelta(hoy, row["fecha_inicio"])
+                return d.years * 12 + d.months
+            return None
+
+        _sf = df_sin_fecha.copy().sort_values("fecha_inicio")
+        tabla_sin_fecha = pd.DataFrame({
+            "Legajo":  _sf["legajo"],
+            "Nombre":  _sf["apenom"],
+            "Empresa": _sf["empleador"],
+            "Cargo":   _sf["cargo"].str.title(),
+            "Sector":  _sf["str"],
+            "Ingreso": _sf["fecha_inicio"].apply(lambda d: d.strftime("%d/%m/%Y") if d else "—"),
+            "Antigüedad estimada (meses)": _sf.apply(_antig_hoy, axis=1),
+        })
+        st.dataframe(tabla_sin_fecha, use_container_width=True, hide_index=True)
+        st.download_button(
+            "⬇  Descargar CSV",
+            data=tabla_sin_fecha.to_csv(index=False).encode("utf-8"),
+            file_name="bajas_sin_fecha_registrada.csv",
+            mime="text/csv",
+        )
 
 st.divider()
 
