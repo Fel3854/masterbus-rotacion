@@ -41,6 +41,8 @@ Una vez aplicados los filtros, la pantalla central mostrará los indicadores cla
 - **Tasa de Rotación**: El porcentaje de bajas sobre la plantilla promedio. Si este número es superior a la media histórica del Grupo, verás una etiqueta roja indicando "**Elevada**" y un aviso de alerta.
 - **Antigüedad media de bajas**: Te muestra cuántos meses en promedio llevaban en la empresa las personas que se fueron.
 
+**Bajas sin fecha registrada.** Si alguien figura inactivo en MasterBus pero nadie cargó su fecha de baja, no se lo puede ubicar en ningún mes. Por eso no cuenta ni como baja ni en la plantilla, en ningún período. La pantalla avisa cuántos hay, y el desplegable *Bajas sin fecha registrada* los lista (con un CSV para descargar). Para corregirlo, cargá la fecha de baja en MasterBus.
+
 ### Gráficos
 En la parte inferior cuentas con pestañas para ver los gráficos de **Evolución Histórica** (te mostrará cómo se viene comportando la tasa en el tiempo y marcará con líneas punteadas el promedio y el límite de alerta) y el **Volumen de Altas y Bajas**.
 
