@@ -43,6 +43,20 @@ logger = logging.getLogger(__name__)
 NOTIFICADOS_FILE = Path(__file__).resolve().parent / "notificados.json"
 FECHAS_INVALIDAS = {"00/00/0000", "", None}
 
+# Sólo el personal del Grupo Master (las mismas empresas que el dashboard, en
+# dashboard_rotacion/utils.py). La API trae también a terceros (Plusmar, Auteri…),
+# que no son personal propio.
+GRUPO_MASTER = {
+    "MASTER BUS S.A",
+    "MASTER BUS SA",
+    "MASTER BUS TASA",
+    "SINTRA",
+    "M B M S.A.",
+    "MASTER MINING SA",
+    "SOLUCIONES IOT S.A.",
+    "ENDUROCO LATAM SA",
+}
+
 # ─── Mapeo cargo → gerente responsable ──────────────────────
 CARGO_GERENTE = {
     "ACTIVADOR":                                     "jcabral@masterbus.net",
@@ -171,6 +185,8 @@ def filtrar_empleados_mes5(
     resultado = []
 
     for emp in empleados:
+        if (emp.get("empleador") or "").strip() not in GRUPO_MASTER:
+            continue
         if emp.get("activo") != "1":
             continue
         if not fechafin_vacia(emp):
@@ -198,6 +214,10 @@ def agrupar_por_gerente(empleados: List[Dict]) -> Dict[str, List[Dict]]:
 
     for emp in empleados:
         cargo = emp.get("cargo", "").strip().upper()
+        # Desde 2022 casi todos los conductores se cargan como CONDUCTORES: es el
+        # mismo cargo (misma regla que Seguimiento y Ausentismo en el dashboard).
+        if cargo.startswith("CONDUCTOR"):
+            cargo = "CONDUCTOR"
         gerente = CARGO_GERENTE.get(cargo)
         if gerente:
             grupos[gerente].append(emp)
