@@ -112,7 +112,9 @@ A fin de mes (o en el momento del corte), debes exportar estas novedades para el
 1. Desplázate hasta la sección **Descargar listado**.
 2. Selecciona las fechas de corte en **"Desde"** y **"Hasta"** (por ejemplo, del 01 al 30 del mes).
 3. Aparecerá en pantalla la tabla con todos los registros encontrados y los totales. Revisa que todo sea correcto.
-4. Presiona el botón **⬇ Descargar TXT**. Esto te bajará un archivo con el formato exacto requerido por el sistema (número de legajo y monto formateado).
+4. Descarga el archivo:
+   - En **Descuentos** hay dos botones. **⬇ Descargar Excel** baja la misma tabla que ves en pantalla, para revisarla o compartirla. **⬇ Descargar TXT** baja el archivo con el formato exacto requerido por el sistema de liquidación (número de legajo y monto formateado).
+   - En **Adelantos**, el botón **⬇ Descargar Excel (Santander)** baja la planilla de pagos masivos del banco.
 
 ### Paso 4: Corrección de Errores (Eliminar)
 Si cargaste un monto mal o te equivocaste de empleado:

@@ -11,6 +11,7 @@ import sys
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 from utils import cargar_empleados_activos, get_supabase, leer_paginado, slug_empleador, COLOR_PRIMARY, COLOR_SECONDARY
 import auditoria
+import descuentos
 from auth import can_edit
 
 # ─── CSS ─────────────────────────────────────────────────────
@@ -540,28 +541,25 @@ else:
     </div>
     """, unsafe_allow_html=True)
 
-    df_vista = df_reg.copy()
-    df_vista["Cuota"] = df_vista.apply(
-        lambda r: f"{int(r['cuota_numero'])}/{int(r['cuotas_total'])}" if int(r["cuotas_total"]) > 1 else "—",
-        axis=1,
-    )
-    df_display = df_vista[[
-        "legajo","apenom","empleador","tipo_descuento","fecha_descuento","Cuota","monto","motivo",
-    ]].rename(columns={
-        "legajo":"Legajo","apenom":"Nombre","empleador":"Empleador",
-        "tipo_descuento":"Tipo","fecha_descuento":"Fecha",
-        "monto":"Monto ($)","motivo":"Motivo",
-    })
+    df_display = descuentos.tabla(df_reg)
     df_display["Monto ($)"] = df_display["Monto ($)"].apply(lambda x: f"$ {int(x):,.0f}".replace(",","."))
     st.dataframe(df_display, use_container_width=True, hide_index=True)
 
-    txt = _generar_txt(df_reg)
-    st.download_button(
-        "⬇  Descargar TXT",
-        data=txt.encode("utf-8"),
-        file_name=f"{slug_empleador(empleador_sel)}_{desde.strftime('%d-%m-%Y')}_a_{hasta.strftime('%d-%m-%Y')}.txt",
-        mime="text/plain",
-    )
+    nombre_archivo = f"{slug_empleador(empleador_sel)}_{desde.strftime('%d-%m-%Y')}_a_{hasta.strftime('%d-%m-%Y')}"
+    with st.container(horizontal=True):
+        st.download_button(
+            "⬇  Descargar Excel",
+            data=descuentos.exportar_excel(df_reg),
+            file_name=f"{nombre_archivo}.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        )
+        txt = _generar_txt(df_reg)
+        st.download_button(
+            "⬇  Descargar TXT",
+            data=txt.encode("utf-8"),
+            file_name=f"{nombre_archivo}.txt",
+            mime="text/plain",
+        )
 
 # ─── Sección eliminar ─────────────────────────────────────────
 if can_edit("descuentos"):

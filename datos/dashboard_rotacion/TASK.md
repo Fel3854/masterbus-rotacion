@@ -92,7 +92,7 @@ derecha, entrando como dueño de la app) → **⋮** → **Reboot app**.
 |---|---|
 | Ausentismo | Días de ausencia por novedades de MasterBus (`/api/v1/auto`) como % del trabajo posible (días-persona empleados), apilados por tipo, con los francos en una línea aparte; filtros por sector, puesto, tipo y novedad. La ven todos |
 | Adelantos de Sueldo | Alta de adelantos + exportación Excel formato Santander |
-| Descuentos | Alta de descuentos con cuotas + exportación TXT para liquidación |
+| Descuentos | Alta de descuentos con cuotas + exportación Excel (la tabla en pantalla) y TXT para liquidación |
 | Vencimientos | Control de documentación y habilitaciones próximas a vencer |
 | **Seguimiento** | **Entrevistas al personal ingresante, con dos cuestionarios que se eligen arriba de la pantalla: conductores (2° mes) y resto del personal (efectivización). Carga tabulada, alertas e indicadores** |
 | Minutas Reunión | Temas y acciones de RRHH con estado y fecha límite |
