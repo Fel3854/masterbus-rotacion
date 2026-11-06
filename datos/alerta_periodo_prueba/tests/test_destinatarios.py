@@ -44,6 +44,11 @@ def test_los_administrativos_van_a_operaciones():
     assert grupos == {"mdepeon@masterbus.net": [_empleado("1", "ADMINISTRATIVO")]}
 
 
+def test_los_cadetes_van_a_operaciones():
+    grupos = main.agrupar_por_gerente([_empleado("1", "CADETE")])
+    assert grupos == {"mdepeon@masterbus.net": [_empleado("1", "CADETE")]}
+
+
 # ─── Sólo Grupo Master ────────────────────────────────────────
 
 def test_solo_avisa_por_el_personal_del_grupo_master():

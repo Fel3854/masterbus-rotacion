@@ -77,7 +77,7 @@ CARGO_GERENTE = {
     "ASISTENTE OPERATIVO":                           "mdepeon@masterbus.net",
     "ASISTENTE OPERATIVO DE SEGURIDAD VIAL":         "jcigna@masterbus.net",
     "BRIGADISTA":                                    "talcantara@masterbus.net",
-    "CADETE":                                        "dscirocco@masterbus.net",
+    "CADETE":                                        "mdepeon@masterbus.net",  # Operación Campana
     "CELADOR":                                       "mdepeon@masterbus.net",
     "CHAPISTA":                                      "asalvetti@masterbus.net",
     "CHAPISTA (SALTA/CAT)":                          "asalvetti@masterbus.net",
