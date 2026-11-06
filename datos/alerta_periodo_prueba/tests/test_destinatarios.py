@@ -38,6 +38,12 @@ def test_los_demas_cargos_no_cambian():
     assert grupos == {main.CARGO_GERENTE["MECANICO"]: [_empleado("1", "MECANICO")]}
 
 
+def test_los_administrativos_van_a_operaciones():
+    # Los administrativos activos son todos de Operación SUR; antes le llegaban a dscirocco.
+    grupos = main.agrupar_por_gerente([_empleado("1", "ADMINISTRATIVO")])
+    assert grupos == {"mdepeon@masterbus.net": [_empleado("1", "ADMINISTRATIVO")]}
+
+
 # ─── Sólo Grupo Master ────────────────────────────────────────
 
 def test_solo_avisa_por_el_personal_del_grupo_master():

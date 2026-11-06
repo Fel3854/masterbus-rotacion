@@ -61,7 +61,7 @@ GRUPO_MASTER = {
 CARGO_GERENTE = {
     "ACTIVADOR":                                     "jcabral@masterbus.net",
     "ADMINISTRADOR DE COORDINACION IT":              "icarvajal@masterbus.net",
-    "ADMINISTRATIVO":                                "dscirocco@masterbus.net",
+    "ADMINISTRATIVO":                                "mdepeon@masterbus.net",  # son todos de Operación SUR
     "ASISTENTE ADM DE INTENDENCIA":                  "ellanos@masterbus.net",
     "ASISTENTE ADM. DE RRHH":                        "ffillopski@masterbus.net",
     "ASISTENTE ADMINISTRATIVO DE PAÃOL":             "jcabral@masterbus.net",
